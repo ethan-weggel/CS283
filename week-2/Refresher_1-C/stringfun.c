@@ -16,8 +16,49 @@ int  count_words(char *, int, int);
 
 
 int setup_buff(char *buff, char *user_str, int len){
-    //TODO: #4:  Implement the setup buff as per the directions
-    return 0; //for now just so the code compiles. 
+    
+    int userStringLength = 0;
+    int bufferIndex = 0;
+    int lastCharWhiteSpace = 0;
+
+    // while we haven't reached the null terminator in our user string
+    while (*user_str) {
+
+        // we exit program if the user's string is greater than 50 characters
+        if (userStringLength >= BUFFER_SZ) {
+            exit(-1);
+        }
+
+        if (lastCharWhiteSpace && (*(user_str) == ' ' || *(user_str) == '\t')) {
+            user_str++;
+            continue;
+        }  else if (lastCharWhiteSpace && !(*(user_str) == ' ' || *(user_str) == '\t')) {
+            lastCharWhiteSpace = 0;
+            *(buff + (sizeof(char) * userStringLength)) = *(user_str);
+            userStringLength++;
+            bufferIndex++;
+        } else if (!lastCharWhiteSpace && (*(user_str) == ' ' || *(user_str) == '\t')) {
+            lastCharWhiteSpace = 1;
+            *(buff + (sizeof(char) * userStringLength)) = *(user_str);
+            userStringLength++;
+            user_str++;
+        } else {
+            lastCharWhiteSpace = 0;
+            *(buff + (sizeof(char) * userStringLength)) = *(user_str);
+            userStringLength++;
+            user_str++;
+        }
+    }
+
+    bufferIndex = userStringLength;
+
+    // while we haven't reached the end of our buffer
+    while (bufferIndex < BUFFER_SZ) {
+        *(buff + (sizeof(char) * bufferIndex)) = '.';
+        bufferIndex++;
+    }
+
+    return userStringLength; 
 }
 
 void print_buff(char *buff, int len){
