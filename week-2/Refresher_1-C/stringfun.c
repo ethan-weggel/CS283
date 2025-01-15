@@ -25,7 +25,7 @@ int setup_buff(char *buff, char *user_str, int len){
     while (*user_str) {
 
         // we exit program if the user's string is greater than 50 characters
-        if (userStringLength >= BUFFER_SZ) {
+        if (userStringLength >= len) {
             exit(-1);
         }
 
@@ -53,7 +53,7 @@ int setup_buff(char *buff, char *user_str, int len){
     bufferIndex = userStringLength;
 
     // while we haven't reached the end of our buffer
-    while (bufferIndex < BUFFER_SZ) {
+    while (bufferIndex < len) {
         *(buff + (sizeof(char) * bufferIndex)) = '.';
         bufferIndex++;
     }
