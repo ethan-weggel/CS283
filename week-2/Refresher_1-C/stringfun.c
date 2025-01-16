@@ -16,6 +16,11 @@ void reverse_string(char*, int);
 void reverse_print(char*, int);
 void word_print(char*, int);
 void selection_print(char*, int, int);
+void search_and_replace(char*, int, char*, char*);
+int string_eq(char*, char*, int, int, int);
+int size_check(int, int, int, int); 
+int size_of_null_terminated_string(char*);
+void overwrite_buff_with_replacement(char*, int, int, char*, int);
 
 // sets up the buffer by copying over user string and returns string length
 int setup_buff(char *buff, char *user_str, int len){
@@ -173,6 +178,139 @@ void word_print(char* buff, int str_len) {
     }
 }
 
+// calculate if a section of buffer equals a null terminated string
+int string_eq(char* buff, char* string2, int buffStart, int len1, int len2) {
+    if (len1 != len2) {
+        return 0;
+    }
+
+    // exit as soon as a character doesn't match
+    for (int i = 0; i < len1; i++) {
+        if (*(buff + (sizeof(char) * (i + buffStart))) != *(string2 + (sizeof(char) * i))) {
+            return 0;
+        }
+    }
+
+    // otherwise return 1 or true
+    return 1;
+}
+
+// get size by iterating through character array with char pointer, must be null termrmianted (used for getting length of args)
+int size_of_null_terminated_string(char* string) {
+    int count = 0;
+    while (*string) {
+        count++;
+        string++;
+    }
+    return count;
+}
+
+// ensures that our replacement won't exceed our buffer size
+int size_check(int bufferSize, int targetSize, int replacementSize, int str_len) {
+
+    int newLength = str_len - targetSize + replacementSize;
+    if (newLength <= bufferSize) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+// creates temp buff with the original buff up to replacement, replacement gets added, then the rest of original buffer. 
+// original buffer is then overwritten with temp buff to have replaced word
+void overwrite_buff_with_replacement(char* buff, int startIndex, int endIndex, char* replacement, int replacementLength) {
+    char* tempBuff = malloc(BUFFER_SZ * sizeof(char)); // Allocate memory for temp buffer
+
+    int buffIndex = 0;      // tracks position in the original buffer
+    int tempBuffIndex = 0;  // tracks position in the temp buffer
+
+    while (buffIndex < startIndex && tempBuffIndex < BUFFER_SZ) {
+        *(tempBuff + tempBuffIndex) = *(buff + buffIndex);
+        tempBuffIndex++;
+        buffIndex++;
+    }
+
+    for (int i = 0; i < replacementLength && tempBuffIndex < BUFFER_SZ; i++) {
+        *(tempBuff + tempBuffIndex) = *(replacement + i);
+        tempBuffIndex++;
+    }
+
+    buffIndex = endIndex;
+
+    while (buffIndex < BUFFER_SZ && tempBuffIndex < BUFFER_SZ) {
+        *(tempBuff + tempBuffIndex) = *(buff + buffIndex);
+        tempBuffIndex++;
+        buffIndex++;
+    }
+
+    // fill the rest of tempBuff with null or placeholder characters to maintain BUFFER_SZ
+    while (tempBuffIndex < BUFFER_SZ) {
+        *(tempBuff + tempBuffIndex) = '.';
+        tempBuffIndex++;
+    }
+
+    // overwrite buff with our temp buff
+    for (int i = 0; i < BUFFER_SZ; i++) {
+        *(buff + i) = *(tempBuff + i);
+    }
+
+    free(tempBuff);
+}
+
+
+// replaces first occurrence of target word with replacement assuming buffer size is not exceeded by operation
+// otherwise operation is voided. does nothing is no matches were found.
+void search_and_replace(char* buff, int str_len, char* target, char* replacement) {
+    int words = 0;
+    int buffIndex = 0;
+    int wordStart = 0;
+    int wordEnd = 0;
+
+    printf("Word Search and Replace\n-----------------------\n");
+
+    // same functionality as word print except we do not use selection_print
+    // instead we use helpers to make sure we found a word equal to our target.
+    // and that we can replace without exceeding buffer. then we call the overwrite function
+    // the structure is otherwise identical
+    for (int i = 0; i < str_len; i++) {
+        if (*(buff + (sizeof(char) * i)) == ' ' && i != 0 && i != str_len-1) {
+            words++;
+            int targetSize = size_of_null_terminated_string(target);
+            int replacementSize = size_of_null_terminated_string(replacement);
+
+            if (size_check(BUFFER_SZ, targetSize, replacementSize, str_len)) {
+                if (string_eq(buff, target, wordStart, (wordEnd - wordStart), targetSize)) {
+                    overwrite_buff_with_replacement(buff, wordStart, wordEnd, replacement, replacementSize);
+                }
+            } 
+
+            wordStart = wordEnd + 1;
+        }
+        buffIndex = i;
+        wordEnd++;
+    }
+
+    if (*(buff + (sizeof(char) * (buffIndex + 1))) == '.') {
+        words++;
+        int targetSize = size_of_null_terminated_string(target);
+        int replacementSize = size_of_null_terminated_string(replacement);
+        if (size_check(BUFFER_SZ, targetSize, replacementSize, str_len)) {
+            if (string_eq(buff, target, wordStart, (wordEnd - wordStart), targetSize)) {
+                overwrite_buff_with_replacement(buff, wordStart, wordEnd, replacement, replacementSize);
+            }
+        } 
+    }
+
+    int newUserStringLength = str_len - size_of_null_terminated_string(target) + size_of_null_terminated_string(replacement);
+
+    printf("Modified String: ");
+    for (int i = 0; i < newUserStringLength; i++) {
+        printf("%c", *(buff + i));
+    }
+    printf("\n");
+
+}
+
 int main(int argc, char *argv[]){
 
     char *buff;             
@@ -250,6 +388,14 @@ int main(int argc, char *argv[]){
 
         case 'w':
             word_print(buff, user_str_len);
+            break;
+
+        case 'x':
+            if (argc != 5) {
+                usage(argv[0]);
+                exit(-1);
+            }
+            search_and_replace(buff, user_str_len, *(argv + 3), *(argv + 4));
             break;
 
         default:
