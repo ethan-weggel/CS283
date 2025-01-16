@@ -11,13 +11,13 @@ void print_buff(char *, int);
 int setup_buff(char *, char *, int);
 
 //prototypes for functions to handle required functionality
-int count_words(char *, int, int);
+int count_words(char *, int);
 void reverse_string(char*, int);
 void reverse_print(char*, int);
 void word_print(char*, int);
 void selection_print(char*, int, int);
 
-
+// sets up the buffer by copying over user string and returns string length
 int setup_buff(char *buff, char *user_str, int len){
     
     int userStringLength = 0;
@@ -32,6 +32,8 @@ int setup_buff(char *buff, char *user_str, int len){
             exit(-1);
         }
 
+        // combinations of last previous character and current character in terms of white space
+        // this is to see if we should be coping over whitespace or not
         if (lastCharWhiteSpace && (*(user_str) == ' ' || *(user_str) == '\t')) {
             user_str++;
             continue;
@@ -77,16 +79,19 @@ void usage(char *exename){
 
 }
 
-int count_words(char *buff, int len, int str_len){
+// counts words, returns the number of words in user string from buffer
+int count_words(char *buff, int str_len){
     
     int words = 0;
     int buffIndex = 0;
 
+    // if we know the string length was zero, we can immediately return to make other logic easier
     if (str_len == 0) {
         printf("Word Count: %d\n", words);
         return 0;
     }
 
+    // while we are in range of the user string, check for white space and increment a counter every white space
     for (int i = 0; i < str_len; i++) {
         if (*(buff + (sizeof(char) * i)) == ' ' && i != 0 && i != str_len-1) {
             words++;
@@ -94,6 +99,7 @@ int count_words(char *buff, int len, int str_len){
         buffIndex = i;
     }
 
+    // increment one last time at the end of the word
     if (*(buff + (sizeof(char) * (buffIndex + 1))) == '.') {
         words++;
     }
@@ -101,10 +107,12 @@ int count_words(char *buff, int len, int str_len){
     return words;
 }
 
+// reverses the string in place using a two pointer approach on the buffer
 void reverse_string(char* buff, int str_len) {
     char* tail = buff + str_len - 1;
     char temp;
 
+    // iterate until the pointers meet or pass one another
     while (buff < tail) {
         temp = *buff;
         *buff = *tail;
@@ -114,6 +122,8 @@ void reverse_string(char* buff, int str_len) {
     }
 }
 
+// special print function for reverse print
+// buff is not null terminated so we need to print up to a back limit
 void reverse_print(char* buff, int print_len) {
     for (int i = 0; i < print_len; i++) {
         printf("%c", *(buff + (sizeof(char) * i)));
@@ -121,12 +131,15 @@ void reverse_print(char* buff, int print_len) {
     printf("\n");
 }
 
+// similar to reverse print except this prints a portion of a string from
+// one part to another so we don't need to modify buff to print individual words
 void selection_print(char* buff, int start_index, int end_index) {
     for (int i = start_index; i < end_index; i++) {
         printf("%c", *(buff + (sizeof(char) * i)));
     }
 }
 
+// prints words and their lengths on new lines
 void word_print(char* buff, int str_len) {
     int words = 0;
     int buffIndex = 0;
@@ -135,6 +148,8 @@ void word_print(char* buff, int str_len) {
 
     printf("Word Print\n----------\n");
 
+    // same logic as word count, except we keep track of the beginning of the word and end
+    // based on index so we can use selection print each time we reach a new word
     for (int i = 0; i < str_len; i++) {
         if (*(buff + (sizeof(char) * i)) == ' ' && i != 0 && i != str_len-1) {
             words++;
@@ -149,6 +164,7 @@ void word_print(char* buff, int str_len) {
         wordEnd++;
     }
 
+    // print one more time for last word in the string
     if (*(buff + (sizeof(char) * (buffIndex + 1))) == '.') {
         words++;
         printf("%d. ", words);
@@ -159,20 +175,25 @@ void word_print(char* buff, int str_len) {
 
 int main(int argc, char *argv[]){
 
-    char *buff;             //placehoder for the internal buffer
-    char *input_string;     //holds the string provided by the user on cmd line
-    char opt;               //used to capture user option from cmd line
-    int  rc;                //used for return codes
-    int  user_str_len;      //length of user supplied string
+    char *buff;             
+    char *input_string;     
+    char opt;               
+    int  rc;                
+    int  user_str_len;      
 
     //TODO:  #1. WHY IS THIS SAFE, aka what if arv[1] does not exist?
-    //      PLACE A COMMENT BLOCK HERE EXPLAINING
+    /* ANSWER: this is safe beecause if argv[1] doesn't exist then we won't know what option the
+                user is trying to perform so we quit the program but not before telling the user
+                what the usage is. We are also making sure that the second argument IS a flag with
+                the dash we are checking for. This means the program will work as intended (i.e.
+                it makes the program "safe").
+    */
     if ((argc < 2) || (*argv[1] != '-')){
         usage(argv[0]);
         exit(1);
     }
 
-    opt = (char)*(argv[1]+1);   //get the option flag
+    opt = (char)*(argv[1]+1); 
 
     //handle the help flag and then exit normally
     if (opt == 'h'){
@@ -180,29 +201,32 @@ int main(int argc, char *argv[]){
         exit(0);
     }
 
-    //WE NOW WILL HANDLE THE REQUIRED OPERATIONS
 
     //TODO:  #2 Document the purpose of the if statement below
-    //      PLACE A COMMENT BLOCK HERE EXPLAINING
+    /* ANSWER: This is to check for the amount of arguments passed into the program at run time.
+                we want to make sure that at least three are passed in (program name, flag/option and string).
+                If we have less than three then the program will not be able to function as intended. So we print
+                the usage as good practice to make sure the user knows what the program expects.
+    */
     if (argc < 3){
         usage(argv[0]);
         exit(1);
     }
 
-    input_string = argv[2]; //capture the user input string
+    input_string = argv[2]; 
 
     //TODO:  #3 Allocate space for the buffer using malloc and
     //          handle error if malloc fails by exiting with a 
     //          return code of 99
     // CODE GOES HERE FOR #3
 
-    buff = malloc(BUFFER_SZ * sizeof(char));
+    buff = malloc(BUFFER_SZ * sizeof(char)); // allocated the space
 
-    if (buff == NULL) {
+    if (buff == NULL) { // making sure that the buffer isn't NULL (i.e. we got the memory we wanted)
         exit(99);
     }
 
-    user_str_len = setup_buff(buff, input_string, BUFFER_SZ);     //see todos
+    user_str_len = setup_buff(buff, input_string, BUFFER_SZ);
     if (user_str_len < 0){
         printf("Error setting up buffer, error = %d", user_str_len);
         exit(2);
@@ -210,7 +234,7 @@ int main(int argc, char *argv[]){
 
     switch (opt){
         case 'c':
-            rc = count_words(buff, BUFFER_SZ, user_str_len);  //you need to implement
+            rc = count_words(buff, user_str_len); 
             if (rc < 0){
                 printf("Error counting words, rc = %d", rc);
                 exit(2);
@@ -233,7 +257,6 @@ int main(int argc, char *argv[]){
             exit(1);
     }
 
-    //TODO:  #6 Dont forget to free your buffer before exiting
     print_buff(buff, BUFFER_SZ);
     free(buff);
     exit(0);
@@ -245,4 +268,13 @@ int main(int argc, char *argv[]){
 //          is a good practice, after all we know from main() that 
 //          the buff variable will have exactly 50 bytes?
 //  
-//          PLACE YOUR ANSWER HERE
+/* ANSWER: This is good practice because we never know if we need to change the size
+            of the buffer. In general for the first version of this application we can assume it 
+            will always be 50 bytes, but if we pass in the alias for the size then we can simply change
+            how the size is defined and we don't need to refactor much. This is also good practice because we
+            never know when we may need the size rather than guess we don't and then have to go back and modify prototypes
+            later. NOTE: in my solutions, I originally passed in the BUFFER_SZ variable as an integer to every
+            function but got rid of it once I CONFIRMED that everything worked without it in some functions.
+            This was to make the code cleaner but also to eliminate default compilier warnings (which can be turned off, but
+            it was sanity of mind).
+*/
