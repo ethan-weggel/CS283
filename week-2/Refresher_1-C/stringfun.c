@@ -224,12 +224,14 @@ void overwrite_buff_with_replacement(char* buff, int startIndex, int endIndex, c
     int buffIndex = 0;      // tracks position in the original buffer
     int tempBuffIndex = 0;  // tracks position in the temp buffer
 
+    // start by loading up the temp buffer with buffer values before target word
     while (buffIndex < startIndex && tempBuffIndex < BUFFER_SZ) {
         *(tempBuff + tempBuffIndex) = *(buff + buffIndex);
         tempBuffIndex++;
         buffIndex++;
     }
 
+    // load replacement values from replacement into temp buff 
     for (int i = 0; i < replacementLength && tempBuffIndex < BUFFER_SZ; i++) {
         *(tempBuff + tempBuffIndex) = *(replacement + i);
         tempBuffIndex++;
@@ -237,23 +239,25 @@ void overwrite_buff_with_replacement(char* buff, int startIndex, int endIndex, c
 
     buffIndex = endIndex;
 
+    // add the rest of the buffer after replacement to temp buffer
     while (buffIndex < BUFFER_SZ && tempBuffIndex < BUFFER_SZ) {
         *(tempBuff + tempBuffIndex) = *(buff + buffIndex);
         tempBuffIndex++;
         buffIndex++;
     }
 
-    // fill the rest of tempBuff with null or placeholder characters to maintain BUFFER_SZ
+    // fill the rest of tempBuff with null '.' to maintain the buffer size if the replacement was smaller
     while (tempBuffIndex < BUFFER_SZ) {
         *(tempBuff + tempBuffIndex) = '.';
         tempBuffIndex++;
     }
 
-    // overwrite buff with our temp buff
+    // overwrite the original buffer in place with our temporary one
     for (int i = 0; i < BUFFER_SZ; i++) {
         *(buff + i) = *(tempBuff + i);
     }
 
+    // free the memory cause that is good 'n stuff 'n yeah :D
     free(tempBuff);
 }
 
