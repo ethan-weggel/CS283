@@ -88,8 +88,59 @@ int get_student(int fd, int id, student_t *s){
  *            
  */
 int add_student(int fd, int id, char *fname, char *lname, int gpa){
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+    student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);    
+    off_t offset = (off_t) (id * STUDENT_RECORD_SIZE);
+
+    off_t offsetAfterReading = lseek(fd, offset, SEEK_SET);
+
+    // if there was an error seeking
+    if (offsetAfterReading < 0) {
+        printf(M_ERR_DB_READ);
+        free(student);
+        return ERR_DB_FILE;
+    }
+
+    ssize_t numberBytesRead = read(fd, student, (size_t)STUDENT_RECORD_SIZE);
+
+    // if there was an error reading
+    if (numberBytesRead < 0) {
+        printf(M_ERR_DB_READ);
+        free(student);
+        return ERR_DB_FILE;
+    }
+
+    if (memcmp(student, (const void *) &EMPTY_STUDENT_RECORD, (size_t)STUDENT_RECORD_SIZE) == 0) {
+        // this means we can write here, the memory at this id is 0
+
+        // making a new student and populating 'fields'
+        student_t* newStudent = (student_t*) malloc(STUDENT_RECORD_SIZE);
+        newStudent->id = id;
+        strncpy(newStudent->fname, fname, sizeof(newStudent->fname)-1);
+        strncpy(newStudent->lname, lname, sizeof(newStudent->lname)-1);
+        newStudent->gpa = gpa;
+
+        ssize_t numberBytesWritten = write(fd, newStudent, (size_t)STUDENT_RECORD_SIZE);
+
+        // if there was an error writing
+        if (numberBytesWritten < 0) {
+            printf(M_ERR_DB_WRITE);
+            free(student);
+            free(newStudent);
+            return ERR_DB_FILE;
+        } else {
+            printf(M_STD_ADDED);
+            free(student);
+            free(newStudent);
+            return NO_ERROR;
+        }
+
+    } else {
+        // otherwise error that student already exists
+        printf(M_ERR_DB_ADD_DUP);
+        free(student);
+        return ERR_DB_OP;
+    }
+    
 }
 
 /*
