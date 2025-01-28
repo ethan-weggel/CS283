@@ -118,7 +118,7 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
 
     off_t offset = 0;
 
-    if (offset > 1) {
+    if (id > 1) {
         offset = (off_t) (id * STUDENT_RECORD_SIZE);
     }
 
@@ -364,7 +364,7 @@ int print_db(int fd) {
 
         // print header AND student if this is first student
         if (hasPrinted == false) {
-            printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST NAME", "GPA");
+            printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST_NAME", "GPA");
             printf(STUDENT_PRINT_FMT_STRING, studentBuffer->id, studentBuffer->fname, studentBuffer->lname, studentBuffer->gpa / 100.0f);
             hasPrinted = true;
             continue;
@@ -424,7 +424,7 @@ void print_student(student_t *s){
         return;
     }
 
-    printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST NAME", "GPA");
+    printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST_NAME", "GPA");
     printf(STUDENT_PRINT_FMT_STRING, s->id, s->fname, s->lname, s->gpa / 100.0f);
     return;
 }
