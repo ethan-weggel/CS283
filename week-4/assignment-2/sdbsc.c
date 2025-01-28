@@ -82,7 +82,9 @@ int get_student(int fd, int id, student_t *s){
         return SRCH_NOT_FOUND;
     }
 
+    // copy read student into passed pointer then free memory
     *s = *student;
+    free(student);
     return NO_ERROR;
 }
 
@@ -112,8 +114,13 @@ int get_student(int fd, int id, student_t *s){
  *            
  */
 int add_student(int fd, int id, char *fname, char *lname, int gpa){
-    student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);    
-    off_t offset = (off_t) (id * STUDENT_RECORD_SIZE);
+    student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);  
+
+    off_t offset = 0;
+
+    if (offset > 1) {
+        offset = (off_t) (id * STUDENT_RECORD_SIZE);
+    }
 
     off_t offsetAfterReading = lseek(fd, offset, SEEK_SET);
 
@@ -189,9 +196,38 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
  *            M_ERR_DB_WRITE     error writing to db file (adding student)
  *            
  */
-int del_student(int fd, int id){
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+int del_student(int fd, int id){ 
+    student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);
+    // get student
+    get_student(fd, id, student);
+
+    off_t offset = (off_t) (id * STUDENT_RECORD_SIZE);
+
+    off_t offsetAfterReading = lseek(fd, offset, SEEK_SET);
+
+    // if there was an error seeking
+    if (offsetAfterReading < 0) {
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+
+    // see if student exists, exit if they don't with correct message
+    if (memcmp(student, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
+        printf(M_STD_NOT_FND_MSG, id);
+        return ERR_DB_OP;
+    }
+
+    ssize_t bytesWritten = write(fd, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE);
+
+    // if there was an error
+    if (bytesWritten == 0 || bytesWritten < 0) {
+        printf(M_ERR_DB_WRITE);
+        return ERR_DB_FILE;
+    } else {
+        printf(M_STD_DEL_MSG, id);
+        return NO_ERROR;
+    }
+
 }
 
 /*
