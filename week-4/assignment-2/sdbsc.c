@@ -128,7 +128,7 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
             free(newStudent);
             return ERR_DB_FILE;
         } else {
-            printf(M_STD_ADDED);
+            printf(M_STD_ADDED, newStudent->id);
             free(student);
             free(newStudent);
             return NO_ERROR;
@@ -136,7 +136,7 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
 
     } else {
         // otherwise error that student already exists
-        printf(M_ERR_DB_ADD_DUP);
+        printf(M_ERR_DB_ADD_DUP, id);
         free(student);
         return ERR_DB_OP;
     }
@@ -195,8 +195,48 @@ int del_student(int fd, int id){
  *            
  */
 int count_db_records(int fd){
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+    off_t fdOffset = STUDENT_RECORD_SIZE;
+    ssize_t bytesRead = 0;
+    int studentCount = 0;
+    bool endOfFile = false;
+
+    student_t* studentBuffer = (student_t*) malloc(STUDENT_RECORD_SIZE);
+
+
+    // lseek to start once with offset equal to 0
+    fdOffset = lseek(fd, 0, SEEK_SET);
+
+    if (fdOffset == -1) {
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+
+    // until we reach EOF
+    while (!endOfFile) {
+
+        bytesRead = read(fd, studentBuffer, STUDENT_RECORD_SIZE);
+
+        if (bytesRead == -1) {
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+
+        if (bytesRead == 0) {
+            endOfFile = true;
+            continue;
+        }
+
+        if (memcmp(studentBuffer, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) != 0) {
+            studentCount++;
+        }
+
+        fdOffset += STUDENT_RECORD_SIZE;
+    }
+
+    printf(M_DB_RECORD_CNT, studentCount);
+
+    free(studentBuffer);
+    return studentCount;
 }
 
 /*
@@ -232,9 +272,57 @@ int count_db_records(int fd){
  *            M_ERR_DB_READ    error reading or seeking the database file
  *            
  */
-int print_db(int fd){
-    printf(M_NOT_IMPL);
-    return NOT_IMPLEMENTED_YET;
+int print_db(int fd) {
+    if (lseek(fd, 0, SEEK_SET) == -1) {
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+
+    bool endOfFile = false;
+    ssize_t bytesRead;
+    student_t* studentBuffer = (student_t*) malloc(STUDENT_RECORD_SIZE);
+    bool hasPrinted = false;
+
+    while (!endOfFile) {
+        bytesRead = read(fd, studentBuffer, STUDENT_RECORD_SIZE);
+
+        // reached EOF
+        if (bytesRead == 0) {
+            break;
+        }
+
+        // got an error reading
+        if (bytesRead < 0) {
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+
+        // don't print student section is that empty
+        if (memcmp(studentBuffer, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
+            continue;
+        }
+
+        // print header AND student if this is first student
+        if (hasPrinted == false) {
+            printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST NAME", "GPA");
+            printf(STUDENT_PRINT_FMT_STRING, studentBuffer->id, studentBuffer->fname, studentBuffer->lname, studentBuffer->gpa / 100.0f);
+            hasPrinted = true;
+            continue;
+        }
+
+        // otherwise just print student
+        if (hasPrinted == true) {
+            printf(STUDENT_PRINT_FMT_STRING, studentBuffer->id, studentBuffer->fname, studentBuffer->lname, studentBuffer->gpa / 100.0f);
+        }
+
+    }
+
+    // if we haven't printed by EOF then display that
+    if (hasPrinted == false) {
+        printf(M_DB_EMPTY);
+    }
+
+    return NO_ERROR;
 }
 
 /*
@@ -266,7 +354,19 @@ int print_db(int fd){
  *            
  */
 void print_student(student_t *s){
-    printf(M_NOT_IMPL);
+    if (s == NULL) {
+        printf(M_ERR_STD_PRINT);
+        return;
+    }
+
+    if (s->id == 0) {
+        printf(M_ERR_STD_PRINT);
+        return;
+    }
+
+    printf(STUDENT_PRINT_HDR_STRING, "ID", "FIRST NAME", "LAST NAME", "GPA");
+    printf(STUDENT_PRINT_FMT_STRING, s->id, s->fname, s->lname, s->gpa / 100.0f);
+    return;
 }
 
 /*
