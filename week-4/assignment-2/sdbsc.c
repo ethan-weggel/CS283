@@ -59,7 +59,31 @@ int open_db(char *dbFile, bool should_truncate){
  *  console:  Does not produce any console I/O used by other functions
  */
 int get_student(int fd, int id, student_t *s){
-    return NOT_IMPLEMENTED_YET;
+    student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);    
+    off_t offset = (off_t) (id * STUDENT_RECORD_SIZE);
+
+    off_t offsetAfterReading = lseek(fd, offset, SEEK_SET);
+
+    // if there was an error seeking
+    if (offsetAfterReading < 0) {
+        free(student);
+        return ERR_DB_FILE;
+    }
+
+    ssize_t numberBytesRead = read(fd, student, STUDENT_RECORD_SIZE);
+
+    // if there was an error reading
+    if (numberBytesRead < 0) {
+        free(student);
+        return ERR_DB_FILE;
+    }
+
+    if (memcmp(student, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
+        return SRCH_NOT_FOUND;
+    }
+
+    *s = *student;
+    return NO_ERROR;
 }
 
 /*
@@ -100,7 +124,7 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
         return ERR_DB_FILE;
     }
 
-    ssize_t numberBytesRead = read(fd, student, (size_t)STUDENT_RECORD_SIZE);
+    ssize_t numberBytesRead = read(fd, student, STUDENT_RECORD_SIZE);
 
     // if there was an error reading
     if (numberBytesRead < 0) {
@@ -109,7 +133,7 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
         return ERR_DB_FILE;
     }
 
-    if (memcmp(student, (const void *) &EMPTY_STUDENT_RECORD, (size_t)STUDENT_RECORD_SIZE) == 0) {
+    if (memcmp(student, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
         // this means we can write here, the memory at this id is 0
 
         // making a new student and populating 'fields'
