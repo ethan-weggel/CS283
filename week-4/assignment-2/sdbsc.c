@@ -59,33 +59,46 @@ int open_db(char *dbFile, bool should_truncate){
  *  console:  Does not produce any console I/O used by other functions
  */
 int get_student(int fd, int id, student_t *s){
-    student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);    
-    off_t offset = (off_t) (id * STUDENT_RECORD_SIZE);
+    off_t fdOffset = STUDENT_RECORD_SIZE;
+    ssize_t bytesRead = 0;
+    bool endOfFile = false;
 
-    off_t offsetAfterReading = lseek(fd, offset, SEEK_SET);
+    student_t* studentBuffer = (student_t*) malloc(STUDENT_RECORD_SIZE);
 
-    // if there was an error seeking
-    if (offsetAfterReading < 0) {
-        free(student);
+
+    // lseek to start once with offset equal to 0
+    fdOffset = lseek(fd, 0, SEEK_SET);
+
+    if (fdOffset == -1) {
+        printf(M_ERR_DB_READ);
         return ERR_DB_FILE;
     }
 
-    ssize_t numberBytesRead = read(fd, student, STUDENT_RECORD_SIZE);
+    // until we reach EOF
+    while (!endOfFile) {
 
-    // if there was an error reading
-    if (numberBytesRead < 0) {
-        free(student);
-        return ERR_DB_FILE;
+        bytesRead = read(fd, studentBuffer, STUDENT_RECORD_SIZE);
+
+        if (bytesRead == -1) {
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+
+        if (bytesRead == 0) {
+            endOfFile = true;
+            continue;
+        }
+
+        if (memcmp(studentBuffer, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) != 0 && studentBuffer->id == id) {
+            // copy read student into passed pointer then free memory
+            *s = *studentBuffer;
+            free(studentBuffer);
+            return NO_ERROR;
+        }
+
+        fdOffset += STUDENT_RECORD_SIZE;
     }
-
-    if (memcmp(student, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
-        return SRCH_NOT_FOUND;
-    }
-
-    // copy read student into passed pointer then free memory
-    *s = *student;
-    free(student);
-    return NO_ERROR;
+    return SRCH_NOT_FOUND;
 }
 
 /*
@@ -115,6 +128,14 @@ int get_student(int fd, int id, student_t *s){
  */
 int add_student(int fd, int id, char *fname, char *lname, int gpa){
     student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);  
+
+    int wasFound = get_student(fd, id, student);
+
+    if (wasFound == 0) {
+        printf(M_ERR_DB_ADD_DUP, id);
+        free(student);
+        return ERR_DB_OP;
+    }
 
     off_t offset = 0;
 
@@ -196,39 +217,66 @@ int add_student(int fd, int id, char *fname, char *lname, int gpa){
  *            M_ERR_DB_WRITE     error writing to db file (adding student)
  *            
  */
-int del_student(int fd, int id){ 
+int del_student(int fd, int id) { 
     student_t* student = (student_t*) malloc(STUDENT_RECORD_SIZE);
     // get student
-    get_student(fd, id, student);
+    int wasFound = get_student(fd, id, student);
 
-    off_t offset = (off_t) (id * STUDENT_RECORD_SIZE);
-
-    off_t offsetAfterReading = lseek(fd, offset, SEEK_SET);
-
-    // if there was an error seeking
-    if (offsetAfterReading < 0) {
-        printf(M_ERR_DB_READ);
-        return ERR_DB_FILE;
-    }
-
-    // see if student exists, exit if they don't with correct message
-    if (memcmp(student, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
+    if (wasFound == -3) {
         printf(M_STD_NOT_FND_MSG, id);
         return ERR_DB_OP;
     }
 
-    ssize_t bytesWritten = write(fd, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE);
-
-    // if there was an error
-    if (bytesWritten == 0 || bytesWritten < 0) {
-        printf(M_ERR_DB_WRITE);
+    // lseek to start once with offset equal to 0
+    off_t fdOffset = lseek(fd, 0, SEEK_SET);
+    if (fdOffset == -1) {
+        printf(M_ERR_DB_READ);
         return ERR_DB_FILE;
-    } else {
-        printf(M_STD_DEL_MSG, id);
-        return NO_ERROR;
     }
 
+    bool endOfFile = false;
+    ssize_t bytesRead;
+    student_t* studentBuffer = (student_t*) malloc(STUDENT_RECORD_SIZE);
+
+    while (!endOfFile) {
+        bytesRead = read(fd, studentBuffer, STUDENT_RECORD_SIZE);
+
+        // reached EOF
+        if (bytesRead == 0) {
+            break;  // end of file, student not found
+        }
+
+        // got an error reading
+        if (bytesRead < 0) {
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+
+        // if we find the student, overwrite with EMPTY_STUDENT_RECORD
+        if (memcmp(studentBuffer, student, STUDENT_RECORD_SIZE) == 0) {
+            // move file pointer to correct location
+            fdOffset = lseek(fd, -STUDENT_RECORD_SIZE, SEEK_CUR);
+            if (fdOffset == -1) {
+                printf(M_ERR_DB_READ);
+                return ERR_DB_FILE;
+            }
+
+            // overwrite with empty student record
+            ssize_t bytesWritten = write(fd, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE);
+            if (bytesWritten < 0) {
+                printf(M_ERR_DB_WRITE);
+                return ERR_DB_FILE;
+            } else {
+                printf(M_STD_DEL_MSG, id);
+                return NO_ERROR;  // student deleted
+            }
+        }
+    }
+
+    printf(M_STD_NOT_FND_MSG, id);  // student not found in file
+    return ERR_DB_OP;
 }
+
 
 /*
  *  count_db_records
@@ -478,8 +526,82 @@ void print_student(student_t *s){
  *            
  */
 int compress_db(int fd){
-    printf(M_NOT_IMPL);
-    return fd;
+    int originalFd = fd;
+    int newFd;
+
+    mode_t mode = S_IRUSR | S_IWUSR;
+
+    newFd = open(TMP_DB_FILE, O_WRONLY | O_CREAT | O_TRUNC, mode);
+
+    // see if we made a new file successfully
+    if (newFd == -1) {
+        printf(M_ERR_DB_OPEN);
+        return ERR_DB_FILE;
+    }
+
+    // now we follow the same algorithm we used for printing the db, except now we write at each found student instead of printing
+    if (lseek(originalFd, 0, SEEK_SET) == -1) {
+        printf(M_ERR_DB_READ);
+        return ERR_DB_FILE;
+    }
+
+    bool endOfFile = false;
+    ssize_t bytesRead;
+    student_t* studentBuffer = (student_t*) malloc(STUDENT_RECORD_SIZE);
+
+    while (!endOfFile) {
+        bytesRead = read(originalFd, studentBuffer, STUDENT_RECORD_SIZE);
+
+        // reached EOF
+        if (bytesRead == 0) {
+            break;
+        }
+
+        // got an error reading
+        if (bytesRead < 0) {
+            printf(M_ERR_DB_READ);
+            return ERR_DB_FILE;
+        }
+
+        // don't print student section is that empty
+        if (memcmp(studentBuffer, &EMPTY_STUDENT_RECORD, STUDENT_RECORD_SIZE) == 0) {
+            continue;
+        }
+
+        // found a student, so write to temporary file
+        ssize_t bytesWritten = write(newFd, studentBuffer, STUDENT_RECORD_SIZE);
+
+        // if we had an error writing the new student found to temp file
+        if (bytesWritten <= 0) {
+            printf(M_ERR_DB_WRITE);
+            return ERR_DB_FILE;
+        }    
+    }
+
+    // close original file so we can overwrite its contents via renaming
+    int closeErr = close(originalFd);
+
+    // if there was an I/O error when closing the file
+    if (closeErr == -1) {
+        printf(M_ERR_DB_CREATE);
+        return ERR_DB_FILE;
+    }
+
+
+    // now we rename the temporary file
+    int renameErr = rename(TMP_DB_FILE, DB_FILE);
+
+    // if there was an error renaming
+    if (renameErr == -1) {
+        printf(M_ERR_DB_CREATE);
+        return ERR_DB_FILE;
+    }
+
+    printf(M_DB_COMPRESSED_OK);
+
+    int returnFd = open_db(DB_FILE, false);
+
+    return returnFd;
 }
 
 
