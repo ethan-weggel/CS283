@@ -84,6 +84,11 @@ int main() {
             exit(OK);
         }
 
+        
+        if (strcmp(clist->commands[0].exe, "dragon") == 0) {
+            printDragon();
+        }
+
         printf(CMD_OK_HEADER, clist->num);
         for (int i = 0; i < clist->num; i++) {
             if (strlen(clist->commands[i].args) == 0) {

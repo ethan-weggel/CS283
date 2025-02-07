@@ -40,7 +40,7 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 
     stripLTWhiteSpace(cmd_line);
 
-    int tokenRC = getCommandToken(cmd_line, commandBuffer);
+    int tokenRC = getTruncToken(cmd_line, commandBuffer, PIPE_STRING);
 
     if (tokenRC == -1) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
@@ -63,7 +63,7 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
         while (strlen(commandBuffer) != 0) {
             char* commandBuffer = malloc(SH_CMD_MAX);
             memset(commandBuffer, 0, SH_CMD_MAX);
-            tokenRC = getCommandToken(cmd_line, commandBuffer);
+            tokenRC = getTruncToken(cmd_line, commandBuffer, PIPE_STRING);
 
             if (strlen(commandBuffer) == 0) {
                 break;
@@ -198,39 +198,109 @@ void stripLTWhiteSpace(char* string) {
     }
 }
 
-int getCommandToken(char* cmdLine, char* tokenBuffer) {
-    size_t pipeIndex = strcspn(cmdLine, PIPE_STRING);
+int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter) {
+    size_t delimiterIndex = strcspn(inputString, delimiter);
     size_t cpyIndex = 0;
     
-    if (pipeIndex == strlen(cmdLine)) {
-        while (cmdLine[cpyIndex] != '\0') {  
-            tokenBuffer[cpyIndex] = cmdLine[cpyIndex];  
+    if (delimiterIndex == strlen(inputString)) {
+        while (inputString[cpyIndex] != '\0') {  
+            tokenBuffer[cpyIndex] = inputString[cpyIndex];  
             cpyIndex++;
         }
         tokenBuffer[cpyIndex] = '\0'; 
-        cmdLine[0] = '\0';  
+        inputString[0] = '\0';  
     
-        cmdLine[0] = '\0';  // Empty the cmdLine for the next command
+        inputString[0] = '\0';  // Empty the inputString for the next token
         return 0;
     }
 
     // Copy the first command into tokenBuffer
-    while (cpyIndex < pipeIndex) {
-        tokenBuffer[cpyIndex] = cmdLine[cpyIndex];
+    while (cpyIndex < delimiterIndex) {
+        tokenBuffer[cpyIndex] = inputString[cpyIndex];
         cpyIndex++;
     }
     tokenBuffer[cpyIndex] = '\0';
 
-    // Shift cmdLine forward past the pipe
-    size_t newCmdLineIndex = 0;
-    pipeIndex++;
+    // Shift cmdLine forward past the delimiter
+    size_t newInputStringIndex = 0;
+    delimiterIndex++;
     
-    while (cmdLine[pipeIndex] != '\0') {
-        cmdLine[newCmdLineIndex] = cmdLine[pipeIndex];
-        newCmdLineIndex++;
-        pipeIndex++;
+    while (inputString[delimiterIndex] != '\0') {
+        inputString[newInputStringIndex] = inputString[delimiterIndex];
+        newInputStringIndex++;
+        delimiterIndex++;
     }
-    cmdLine[newCmdLineIndex] = '\0'; 
+    inputString[newInputStringIndex] = '\0'; 
 
     return 0; 
 }
+
+void printDragon() {
+    int i = 0;
+    int rc = 0;
+    char allLinesExpanded[38][101];  // Fixed size for each line
+    char* dragon = strdup(COMPRESSED_DRAGON);
+    char* lineExapanded = malloc(DRAGON_LINE_SIZE);
+    char* lineToken = malloc(DRAGON_LINE_SIZE);
+
+    // while we still have lines to extract
+    while (strlen(lineToken) != 0 || i == 0) {
+        // get the compressed new line
+        rc = getTruncToken(dragon, lineToken, DOLLAR_STRING);
+        
+        char* compressedToken = malloc(100);  // Sufficient space for the token
+        int j = 0;
+
+        // Declare lineIndex outside the inner loop so it is accessible later
+        int lineIndex = 0;  // Make this available for the entire while loop
+
+        // while we still have tokens to get from the line
+        while (strlen(compressedToken) != 0 || j == 0) {
+            // get the compressed character token
+            rc = getTruncToken(lineToken, compressedToken, DASH_STRING);
+
+            char* characterToAdd = malloc(3);
+            int numberOfRepeats = 0;
+            int k = 0;
+            while (*(compressedToken + k)) {
+                char c = *(compressedToken + k);
+                if (!isdigit(c)) {
+                    *(characterToAdd + k) = c;
+                } else {
+                    numberOfRepeats = atoi((compressedToken + k));
+                }
+                k++;
+            }
+            *(characterToAdd + k) = '\0';
+
+            // now we have our character string and how many times it repeats, so we add it to the line
+            for (int h = 0; h < numberOfRepeats; h++) {
+                for (size_t g = 0; g < strlen(characterToAdd); g++) {
+                    lineExapanded[lineIndex] = characterToAdd[g];
+                    lineIndex++;
+                }
+            }
+            lineExapanded[lineIndex] = '\0';  // Null-terminate the line
+
+            free(characterToAdd);
+            j++;
+        }
+
+        // Copy the null-terminated line with lineIndex being properly scoped now
+        memcpy(allLinesExpanded[i], lineExapanded, lineIndex + 1);  // Copy the line
+
+        i++;
+    }
+
+    // Print the result
+    for (int i = 0; i < 38; i++) {
+        printf("%s\n", allLinesExpanded[i]);
+    }
+
+    // Free allocated memory
+    free(dragon);
+    free(lineExapanded);
+    free(lineToken);
+}
+
+
