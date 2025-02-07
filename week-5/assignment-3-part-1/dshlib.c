@@ -34,24 +34,24 @@
  */
 int build_cmd_list(char *cmd_line, command_list_t *clist) {
     int commandCount = 0;
+    char* commandBuffer = malloc(SH_CMD_MAX);
+    memset(commandBuffer, 0, SH_CMD_MAX);
     command_t* command = (command_t*) malloc(sizeof(command_t));
 
     stripLTWhiteSpace(cmd_line);
 
-    char* cmd_line_copy = strdup(cmd_line);
-    char* commandString = strtok(cmd_line_copy, PIPE_STRING);
+    int tokenRC = getCommandToken(cmd_line, commandBuffer);
 
-    if (commandString == NULL) {
+    if (tokenRC == -1) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
-    char* commandCopy = malloc(strlen(commandString) + 1);
-    memcpy(commandCopy, commandString, strlen(commandString) + 1);
 
-    int rc = buildCommand(commandCopy, command);
+    int buildRC = buildCommand(commandBuffer, command);
+    free(commandBuffer);
     commandCount++;
 
-    if (rc == ERR_CMD_OR_ARGS_TOO_BIG) {
+    if (buildRC == ERR_CMD_OR_ARGS_TOO_BIG) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     } else {
 
@@ -60,8 +60,14 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
         clist->num++;
         free(command);
 
-        while ((commandString = strtok(NULL, PIPE_STRING)) != NULL) {
-            printf("got here\n");
+        while (strlen(commandBuffer) != 0) {
+            char* commandBuffer = malloc(SH_CMD_MAX);
+            memset(commandBuffer, 0, SH_CMD_MAX);
+            tokenRC = getCommandToken(cmd_line, commandBuffer);
+
+            if (strlen(commandBuffer) == 0) {
+                break;
+            }
 
             commandCount++;
 
@@ -69,18 +75,16 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
                 return ERR_CMD_OR_ARGS_TOO_BIG;
             }
 
-            char* commandCopy = malloc(strlen(commandString) + 1);
-            memcpy(commandCopy, commandString, strlen(commandString) + 1);
             
             command_t* newCommand = (command_t*) malloc(sizeof(command_t));
-            printf("new command: %s\n", commandCopy);
-            rc = buildCommand(commandCopy, newCommand);
+            buildRC = buildCommand(commandBuffer, newCommand);
+            free(commandBuffer);
 
-            if (rc == ERR_CMD_OR_ARGS_TOO_BIG) {
+            if (buildRC == ERR_CMD_OR_ARGS_TOO_BIG) {
                 return ERR_CMD_OR_ARGS_TOO_BIG;
             }
             
-            memcpy(&clist->commands[clist->num], command, sizeof(command_t));
+            memcpy(&clist->commands[clist->num], newCommand, sizeof(command_t));
             clist->num++;
 
             free(newCommand);
@@ -97,6 +101,7 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 *   - Will return either 'OK' or 'ERR_CMD_OR_ARGS_TOO_BIG' 
 */
 int buildCommand(char* commandString, command_t* commandStruct) {
+
     int argsLength = 0;
     char* normalizedArgs = malloc(ARG_MAX);
     int endIndex = 0;
@@ -134,6 +139,7 @@ int buildCommand(char* commandString, command_t* commandStruct) {
         stripLTWhiteSpace(token);
 
         argsLength += strlen(token);
+
 
         if (argsLength > ARG_MAX) {
             return ERR_CMD_OR_ARGS_TOO_BIG;
@@ -192,27 +198,39 @@ void stripLTWhiteSpace(char* string) {
     }
 }
 
-void getCommandToken(char* cmdLine, char* tokenBuffer) {
-    int pipeIndex = strcspn(cmdLine, PIPE_STRING);
+int getCommandToken(char* cmdLine, char* tokenBuffer) {
+    size_t pipeIndex = strcspn(cmdLine, PIPE_STRING);
+    size_t cpyIndex = 0;
     
-    if (pipeIndex == sizeof(cmdLine) / sizeof(char)) {
-        tokenBuffer = NULL;
-        return;
+    if (pipeIndex == strlen(cmdLine)) {
+        while (cmdLine[cpyIndex] != '\0') {  
+            tokenBuffer[cpyIndex] = cmdLine[cpyIndex];  
+            cpyIndex++;
+        }
+        tokenBuffer[cpyIndex] = '\0'; 
+        cmdLine[0] = '\0';  
+    
+        cmdLine[0] = '\0';  // Empty the cmdLine for the next command
+        return 0;
     }
 
-    int cpyIndex = 0;
+    // Copy the first command into tokenBuffer
     while (cpyIndex < pipeIndex) {
         tokenBuffer[cpyIndex] = cmdLine[cpyIndex];
         cpyIndex++;
     }
+    tokenBuffer[cpyIndex] = '\0';
 
+    // Shift cmdLine forward past the pipe
+    size_t newCmdLineIndex = 0;
     pipeIndex++;
-    cpyIndex = 0;
-    while (*cmdLine) {
-        cmdLine[cpyIndex] = cmdLine[pipeIndex];
+    
+    while (cmdLine[pipeIndex] != '\0') {
+        cmdLine[newCmdLineIndex] = cmdLine[pipeIndex];
+        newCmdLineIndex++;
         pipeIndex++;
-        cpyIndex++;
     }
-    cmdLine[pipeIndex] = '\0';
-    return;
+    cmdLine[newCmdLineIndex] = '\0'; 
+
+    return 0; 
 }

@@ -44,6 +44,7 @@ typedef struct command_list
 int build_cmd_list(char *cmd_line, command_list_t *clist);
 int buildCommand(char* commandString, command_t* commandStruct);
 void stripLTWhiteSpace(char* string);
+int getCommandToken(char* cmdLine, char* tokenBuffer);
 
 // output constants
 #define CMD_OK_HEADER "PARSED COMMAND LINE - TOTAL COMMANDS %d\n"
