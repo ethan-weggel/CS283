@@ -39,59 +39,54 @@ dragon = [
     r"                                                                                 %%%%%%%@        "
 ]
 
-compressionString = ""
+tokens = []
+
 for line in dragon:
-    currentChar = ""
-    currentCharCnt = 1
+    if not line:
+        # tokens.append("n")
+        continue
+    
+    currentChar = line[0]
+    currentCharCnt = 0
+
     for char in line:
-        if currentChar == "":
-            currentChar = char
-        elif currentChar != char:
-            if currentChar == "%":
-                currentChar = "%%"
-            compressionString += f"{currentChar}{currentCharCnt}-"
-            currentCharCnt = 1
-            currentChar = char
-        else:
+        if char == currentChar:
             currentCharCnt += 1
-    compressionString += "$"
+        else:
+            tokens.append(f"{currentChar}{currentCharCnt}")
+            currentChar = char
+            currentCharCnt = 1
+
+    # Append last segment
+    if currentCharCnt > 0:
+        tokens.append(f"{currentChar}{currentCharCnt}")
+    
+    tokens.append("n")
+
+# Print tokenized output (for debugging)
+formatted_list = "[" + ", ".join(f'"{item}"' for item in tokens) + "]"
+print(formatted_list)
+print(len(tokens))
 
 
-# print(compressionString)
-# print(len(dragon))
-
-# compressionString = " 72-@1-%%4-$- 69-%%6-$- 68-%%6-$- 65-%%1- 1-%%7- 11-@1-$- 64-%%10- 8-%%7-$- 39-%%7- 2-%%4-@1- 9-%%12-@1- 4-%%6- 2-@1-%%4-$- 34-%%22- 6-%%28-$- 32-%%26- 3-%%12- 1-%%15-$- 31-%%29- 1-%%19- 5-%%3-$- 29-%%28-@1- 1-@1-%%18- 8-%%2-$- 28-%%33- 1-%%22-$- 28-%%58-$- 28-%%50-@1-%%6-@1-$- 6-%%8-@1- 11-%%16- 8-%%26- 6-%%2-$- 4-%%13- 9-%%2-@1-%%12- 11-%%11- 1-%%12- 6-@1-%%1-$- 2-%%10- 3-%%3- 8-%%14- 12-%%24-$- 1-%%9- 7-%%1- 9-%%13- 13-%%12-@1-%%11-$-%%9-@1- 16-%%1- 1-%%13- 12-@1-%%25-$-%%8-@1- 17-%%2-@1-%%12- 12-@1-%%28-$-%%7-@1- 19-%%15- 11-%%33-$-%%10- 18-%%15- 10-%%35- 6-%%4-$-%%9-@1- 19-@1-%%14- 9-%%12-@1- 1-%%4- 1-%%17- 3-$-%%10- 18-%%17- 8-%%13- 6-%%18- 1-$-%%9-@1-%%2-@1- 16-%%16-@1- 7-%%14- 5-%%24- 2-$- 1-%%10- 18-%%1- 1-%%14-@1- 8-%%14- 3-%%26- 1-$- 2-%%12- 2-@1- 11-%%18- 8-%%40- 2-%%3-$- 3-%%13- 1-%%2- 2-%%1- 2-%%1-@1- 1-%%18- 10-%%37- 4-%%3-$- 4-%%18- 1-%%22- 11-@1-%%31- 4-%%7-$- 5-%%39- 14-%%28- 8-%%3-$- 6-@1-%%35- 18-%%25-$- 8-%%32- 22-%%19- 2-%%7-$- 11-%%26- 27-%%15- 2-@1-%%9-$- 14-%%20- 11-@1-%%1-@1-%%1- 18-@1-%%18- 3-%%3-$- 18-%%15- 8-%%10- 20-%%15- 4-%%1-$- 16-%%36- 22-%%14-$- 16-%%26- 2-%%4- 1-%%3- 22-%%10- 2-%%3-@1-$- 21-%%19- 1-%%6- 1-%%2- 26-%%13-@1-$- 81-%%7-@1-$-"
-
-
-expandedLines = []
-lines = compressionString.split("$")
-
-for line in lines:
-    expandedLine = ""
-    compressedTokens = line.split("-")
-    compressedTokens = compressedTokens[:-1:]
-
-    count = 0
-    for token in compressedTokens:
+def print_dragon(tokens):
+    """Function to reconstruct the dragon image from compressed tokens"""
+    for token in tokens:
+        if token == "n":
+            print()
+            continue
+        
         pattern = ""
         repeat = ""
 
-        i = 0
-        for i in range(len(token)):
-            if not token[i].isnumeric():
-                pattern += token[i]
+        for char in token:
+            if char.isdigit():
+                repeat += char
             else:
-                repeat += token[i]
+                pattern += char
         
-        repeat = int(repeat)
-
-        expandedLine += pattern * repeat
-
-    expandedLines.append(expandedLine)
-
-
-for line in expandedLines:
-    print(line)
+        repeat_as_int = int(repeat) if repeat else 1
         
-        
+        print(pattern * repeat_as_int, end="")
 
+print_dragon(tokens)

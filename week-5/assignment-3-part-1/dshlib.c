@@ -236,71 +236,48 @@ int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter) {
 }
 
 void printDragon() {
-    int i = 0;
-    int rc = 0;
-    char allLinesExpanded[38][101];  // Fixed size for each line
-    char* dragon = strdup(COMPRESSED_DRAGON);
-    char* lineExapanded = malloc(DRAGON_LINE_SIZE);
-    char* lineToken = malloc(DRAGON_LINE_SIZE);
+    char* compressedDragon[] = {" 72", "@1", "%4", " 23", "n", " 69", "%6", " 25", "n", " 68", "%6", " 26", "n", " 65", "%1", " 1", "%7", " 11", "@1", " 14", "n", " 64", "%10", " 8", "%7", " 11", "n", " 39", "%7", " 2", "%4", "@1", " 9", "%12", "@1", " 4", "%6", " 2", "@1", "%4", " 8", "n", " 34", "%22", " 6", "%28", " 10", "n", " 32", "%26", " 3", "%12", " 1", "%15", " 11", "n", " 31", "%29", " 1", "%19", " 5", "%3", " 12", "n", " 29", "%28", "@1", " 1", "@1", "%18", " 8", "%2", " 12", "n", " 28", "%33", " 1", "%22", " 16", "n", " 28", "%58", " 14", "n", " 28", "%50", "@1", "%6", "@1", " 14", "n", " 6", "%8", "@1", " 11", "%16", " 8", "%26", " 6", "%2", " 16", "n", " 4", "%13", " 9", "%2", "@1", "%12", " 11", "%11", " 1", "%12", " 6", "@1", "%1", " 16", "n", " 2", "%10", " 3", "%3", " 8", "%14", " 12", "%24", " 24", "n", " 1", "%9", " 7", "%1", " 9", "%13", " 13", "%12", "@1", "%11", " 23", "n", "%9", "@1", " 16", "%1", " 1", "%13", " 12", "@1", "%25", " 21", "n", "%8", "@1", " 17", "%2", "@1", "%12", " 12", "@1", "%28", " 18", "n", "%7", "@1", " 19", "%15", " 11", "%33", " 14", "n", "%10", " 18", "%15", " 10", "%35", " 6", "%4", " 2", "n", "%9", "@1", " 19", "@1", "%14", " 9", "%12", "@1", " 1", "%4", " 1", "%17", " 3", "%8", "n", "%10", " 18", "%17", " 8", "%13", " 6", "%18", " 1", "%9", "n", "%9", "@1", "%2", "@1", " 16", "%16", "@1", " 7", "%14", " 5", "%24", " 2", "%2", "n", " 1", "%10", " 18", "%1", " 1", "%14", "@1", " 8", "%14", " 3", "%26", " 1", "%2", "n", " 2", "%12", " 2", "@1", " 11", "%18", " 8", "%40", " 2", "%3", " 1", "n", " 3", "%13", " 1", "%2", " 2", "%1", " 2", "%1", "@1", " 1", "%18", " 10", "%37", " 4", "%3", " 1", "n", " 4", "%18", " 1", "%22", " 11", "@1", "%31", " 4", "%7", " 1", "n", " 5", "%39", " 14", "%28", " 8", "%3", " 3", "n", " 6", "@1", "%35", " 18", "%25", " 15", "n", " 8", "%32", " 22", "%19", " 2", "%7", " 10", "n", " 11", "%26", " 27", "%15", " 2", "@1", "%9", " 9", "n", " 14", "%20", " 11", "@1", "%1", "@1", "%1", " 18", "@1", "%18", " 3", "%3", " 8", "n", " 18", "%15", " 8", "%10", " 20", "%15", " 4", "%1", " 9", "n", " 16", "%36", " 22", "%14", " 12", "n", " 16", "%26", " 2", "%4", " 1", "%3", " 22", "%10", " 2", "%3", "@1", " 10", "n", " 21", "%19", " 1", "%6", " 1", "%2", " 26", "%13", "@1", " 10", "n", " 81", "%7", "@1", " 8", "n"};
+    for (int tokenIndex = 0; tokenIndex < 362; tokenIndex++) {
+        char* token = compressedDragon[tokenIndex];
 
-    // while we still have lines to extract
-    while (strlen(lineToken) != 0 || i == 0) {
-        // get the compressed new line
-        rc = getTruncToken(dragon, lineToken, DOLLAR_STRING);
-        
-        char* compressedToken = malloc(100);  // Sufficient space for the token
-        int j = 0;
-
-        // Declare lineIndex outside the inner loop so it is accessible later
-        int lineIndex = 0;  // Make this available for the entire while loop
-
-        // while we still have tokens to get from the line
-        while (strlen(compressedToken) != 0 || j == 0) {
-            // get the compressed character token
-            rc = getTruncToken(lineToken, compressedToken, DASH_STRING);
-
-            char* characterToAdd = malloc(3);
-            int numberOfRepeats = 0;
-            int k = 0;
-            while (*(compressedToken + k)) {
-                char c = *(compressedToken + k);
-                if (!isdigit(c)) {
-                    *(characterToAdd + k) = c;
-                } else {
-                    numberOfRepeats = atoi((compressedToken + k));
-                }
-                k++;
-            }
-            *(characterToAdd + k) = '\0';
-
-            // now we have our character string and how many times it repeats, so we add it to the line
-            for (int h = 0; h < numberOfRepeats; h++) {
-                for (size_t g = 0; g < strlen(characterToAdd); g++) {
-                    lineExapanded[lineIndex] = characterToAdd[g];
-                    lineIndex++;
-                }
-            }
-            lineExapanded[lineIndex] = '\0';  // Null-terminate the line
-
-            free(characterToAdd);
-            j++;
+        if (strcmp(token, "n") == 0) {
+            printf("\n");
+            continue;
         }
 
-        // Copy the null-terminated line with lineIndex being properly scoped now
-        memcpy(allLinesExpanded[i], lineExapanded, lineIndex + 1);  // Copy the line
+        char* pattern = malloc(2*sizeof(char));
+        char* repeat = malloc(4*sizeof(char));
 
-        i++;
+        int patternIter = 0;
+        int repeatIter = 0;
+        int patternLength = 0;
+        int repeatLength = 0;
+        while (*(token)) {
+            char c = *(token);
+            if (!isdigit(c)) {
+                pattern[patternIter] = c;
+                patternLength = patternIter;
+                patternIter++;
+            } else {
+                repeat[repeatIter] = c;
+                repeatLength = repeatIter;
+                repeatIter++;
+            }
+            token++;
+        }
+        pattern[patternLength+1] = '\0';
+        repeat[repeatLength+1] = '\0';
+
+        token -= (patternIter + repeatIter);
+
+        int repeatAsInt = atoi(repeat);
+
+        for (int i = 0; i < repeatAsInt; i++) {
+            printf("%s", pattern);
+        }
+
+        free(pattern);
     }
-
-    // Print the result
-    for (int i = 0; i < 38; i++) {
-        printf("%s\n", allLinesExpanded[i]);
-    }
-
-    // Free allocated memory
-    free(dragon);
-    free(lineExapanded);
-    free(lineToken);
 }
 
 
