@@ -22,6 +22,7 @@ typedef struct command_list
 
 // Special character #defines
 #define SPACE_CHAR ' '
+#define SPACE_STRING " "
 #define PIPE_CHAR '|'
 #define PIPE_STRING "|"
 
@@ -41,6 +42,8 @@ typedef struct command_list
 
 // prototypes
 int build_cmd_list(char *cmd_line, command_list_t *clist);
+int buildCommand(char* commandString, command_t* commandStruct);
+void stripLTWhiteSpace(char* string);
 
 // output constants
 #define CMD_OK_HEADER "PARSED COMMAND LINE - TOTAL COMMANDS %d\n"
