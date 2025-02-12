@@ -30,6 +30,7 @@ typedef struct command{
 
 //Special character #defines
 #define SPACE_CHAR  ' '
+#define SPACE_STRING " "
 #define PIPE_CHAR   '|'
 #define PIPE_STRING "|"
 
@@ -47,10 +48,10 @@ typedef struct command{
 #define OK_EXIT                 -7
 
 //prototypes
-int alloc_cmd_buff(cmd_buff_t *cmd_buff);
-int free_cmd_buff(cmd_buff_t *cmd_buff);
-int clear_cmd_buff(cmd_buff_t *cmd_buff);
-int build_cmd_buff(char *cmd_line, cmd_buff_t *cmd_buff);
+int alloc_cmd_buff(cmd_buff_t* cmd_buff);
+int free_cmd_buff(cmd_buff_t* cmd_buff);
+int clear_cmd_buff(cmd_buff_t* cmd_buff);
+int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff);
 
 //built in command stuff
 typedef enum {
@@ -61,14 +62,17 @@ typedef enum {
     BI_EXECUTED,
     BI_RC,
 } Built_In_Cmds;
-Built_In_Cmds match_command(const char *input); 
-Built_In_Cmds exec_built_in_cmd(cmd_buff_t *cmd);
+Built_In_Cmds match_command(const char* input); 
+Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd);
 
 //main execution context
 int exec_local_cmd_loop();
-int exec_cmd(cmd_buff_t *cmd);
+int exec_cmd(cmd_buff_t* cmd);
 
-
+// custom functions
+int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter);
+void stripLTWhiteSpace(char* string);
+extern void print_dragon();
 
 
 //output constants

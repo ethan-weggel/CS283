@@ -51,13 +51,51 @@
  *  Standard Library Functions You Might Want To Consider Using (assignment 2+)
  *      fork(), execvp(), exit(), chdir()
  */
-int exec_local_cmd_loop()
-{
-    char *cmd_buff;
+int exec_local_cmd_loop() {
+
+    char *cmd_buff = malloc(SH_CMD_MAX);
     int rc = 0;
     cmd_buff_t cmd;
 
-    // TODO IMPLEMENT MAIN LOOP
+    while (1) {
+
+        printf("%s", SH_PROMPT);
+        if (fgets(cmd_buff, SH_CMD_MAX, stdin) == NULL) {
+            printf("\n");
+            break;
+        }
+
+        // remove the trailing \n from cmd_buff
+        cmd_buff[strcspn(cmd_buff, "\n")] = '\0';
+
+        if (strlen(cmd_buff) == 0) {
+            printf(CMD_WARN_NO_CMD);
+            continue;
+        }
+
+        rc = alloc_cmd_buff(&cmd);
+        if (rc != OK) {
+            return rc;
+        }
+
+        rc = build_cmd_buff(cmd_buff, &cmd);
+        if (rc < 0) {
+            return rc;
+        }
+
+        rc = exec_cmd(&cmd);
+        if (rc < 0) {
+            if (rc == OK_EXIT) {
+                free_cmd_buff(&cmd);
+                free(cmd_buff);
+                return OK;
+            } else {
+                return rc;
+            }
+        }
+
+        clear_cmd_buff(&cmd);
+    }
 
     // TODO IMPLEMENT parsing input to cmd_buff_t *cmd_buff
 
@@ -68,4 +106,220 @@ int exec_local_cmd_loop()
     // for example, if the user input is "ls -l", you would fork/exec the command "ls" with the arg "-l"
 
     return OK;
+}
+
+Built_In_Cmds match_command(const char* input) {
+    if (strcmp(input, "exit") == 0) {
+        return BI_CMD_EXIT;
+    } else if (strcmp(input, "dragon") == 0) {
+        return BI_CMD_DRAGON;
+    } else if (strcmp(input, "cd") == 0) {
+        return BI_CMD_CD;
+    } else {
+        return BI_NOT_BI;
+    }
+}
+
+Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
+    Built_In_Cmds type = match_command(cmd->argv[0]);
+
+    if (type == BI_CMD_EXIT) {
+        return BI_RC;
+    } else if (type == BI_CMD_DRAGON) {
+        print_dragon();
+        return BI_EXECUTED;
+    } else if (type == BI_CMD_CD) {
+        if (cmd->argc == 1) {
+            return BI_EXECUTED;
+        } else {
+            int rc = chdir(cmd->argv[1]);
+
+            if (rc == 0) {
+                return BI_EXECUTED;
+            } else {
+                return BI_RC;
+            }
+        }
+    }
+    return BI_RC;
+}
+
+int exec_cmd(cmd_buff_t* cmd) {
+    Built_In_Cmds type = match_command(cmd->argv[0]);
+
+    if (type == BI_NOT_BI) {
+        int pRes, cRes;
+
+        pRes = fork();
+        if (pRes < 0) {
+            perror("Error starting fork child process.");
+            return ERR_EXEC_CMD;
+        }
+
+        if (pRes == 0) {
+            int rc = execv(cmd->argv[0], cmd->argv);
+            if (rc < 0) {
+                perror("Error executing external command.");
+                return ERR_EXEC_CMD;
+            }
+        } else {
+            wait(&cRes);
+            return WEXITSTATUS(cRes);
+        }
+
+    } else {
+        Built_In_Cmds rc = exec_built_in_cmd(cmd);
+        if (rc == BI_RC) {
+            return OK_EXIT;
+        } else {
+            return OK;
+        }
+    }
+    return OK;
+}
+
+int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
+    cmd_buff  = (cmd_buff_t*) malloc(sizeof(cmd_buff_t));
+
+    if (cmd_buff == NULL) {
+        return ERR_MEMORY;
+    }
+
+    return OK;
+}
+
+int free_cmd_buff(cmd_buff_t* cmd_buff) {
+    free(cmd_buff);
+    return OK;
+}
+
+int clear_cmd_buff(cmd_buff_t* cmd_buff) {
+    memset(cmd_buff, '\0', sizeof(*cmd_buff));
+    return OK;
+}
+
+int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
+    int argc = 0;
+    int argsLength = 0;
+
+    // get rid of leading and trailing whitespace
+    // convert tabs to spaces to make conversion easier
+    stripLTWhiteSpace(cmd_line);
+    for (size_t i = 0; i < strlen(cmd_line); i++) {
+        if (cmd_line[i] == '\t') {
+            cmd_line[i] = SPACE_CHAR;
+        }
+    }
+
+
+    // isolate exe arg
+    char* token = strtok(cmd_line, SPACE_STRING);
+
+    if (strlen(token) > EXE_MAX) {
+        return ERR_CMD_OR_ARGS_TOO_BIG;
+    }
+
+    strcpy(cmd_buff->argv[argc++], token);
+
+
+    // isolate and 'normalize' args by removing whitespace and writing to new 
+    // arg buffer separating by a single space between each arg
+    while (token != NULL) {
+        token = strtok(NULL, SPACE_STRING);
+
+        // we are done so break
+        if (token == NULL) {
+            break;
+        }
+
+        stripLTWhiteSpace(token);
+
+        argsLength += strlen(token);
+
+        if (argsLength > ARG_MAX) {
+            return ERR_CMD_OR_ARGS_TOO_BIG;
+        }
+
+        strcpy(cmd_buff->argv[argc++], token);
+
+    }
+
+    return OK;
+}
+
+/*  - Takes in character pointer
+*   - Removes all LEADING and TRAILING whitespace only
+*   - Modifies in place
+*/  
+void stripLTWhiteSpace(char* string) {
+    if (*string == '\0') {
+        return;
+    }
+
+    // Find the first non-whitespace character
+    char *start = string;
+    while (*start && (isspace((unsigned char) *start) || *start == '\t')) {
+        start++;
+    }
+
+    // Find the last non-whitespace character
+    char *end = string + strlen(string) - 1;
+    while (end > start && (isspace((unsigned char) *end) || *end == '\t')) {
+        end--;
+    }
+
+    if (start != string) {
+        char* overwritePtr = string;
+        while (start <= end) {
+            *overwritePtr = *start;
+            overwritePtr++;
+            start++;
+        }
+        *overwritePtr = '\0'; 
+    } else {
+        *(end + 1) = '\0'; 
+    }
+}
+
+
+// Given an input string and a pointer to a buffer as well as a delimiter
+// this function will copy the characters from the input string to the tokenBuffer
+// until the delimiter is reached. 
+// The inputString is modified in place so the chracters that were copied shifts the pointer over in 
+// memory to resume reading after the last occurrence of the delimiter. 
+int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter) {
+    size_t delimiterIndex = strcspn(inputString, delimiter);
+    size_t cpyIndex = 0;
+    
+    if (delimiterIndex == strlen(inputString)) {
+        while (inputString[cpyIndex] != '\0') {  
+            tokenBuffer[cpyIndex] = inputString[cpyIndex];  
+            cpyIndex++;
+        }
+        tokenBuffer[cpyIndex] = '\0'; 
+        inputString[0] = '\0';  
+    
+        inputString[0] = '\0';  // Empty the inputString for the next token
+        return 0;
+    }
+
+    // Copy the first command into tokenBuffer
+    while (cpyIndex < delimiterIndex) {
+        tokenBuffer[cpyIndex] = inputString[cpyIndex];
+        cpyIndex++;
+    }
+    tokenBuffer[cpyIndex] = '\0';
+
+    // Shift cmdLine forward past the delimiter
+    size_t newInputStringIndex = 0;
+    delimiterIndex++;
+    
+    while (inputString[delimiterIndex] != '\0') {
+        inputString[newInputStringIndex] = inputString[delimiterIndex];
+        newInputStringIndex++;
+        delimiterIndex++;
+    }
+    inputString[newInputStringIndex] = '\0'; 
+
+    return 0; 
 }
