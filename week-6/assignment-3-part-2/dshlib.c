@@ -128,17 +128,19 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
         print_dragon();
         return BI_EXECUTED;
     } else if (type == BI_CMD_CD) {
-        if (cmd->argc != 1) {
-            return BI_RC;
-        } else {
-            int rc = chdir(cmd->argv[1]);
 
-            if (rc == 0) {
-                return BI_EXECUTED;
-            } else {
-                return BI_RC;
-            }
+        if (cmd->argc == 1) {
+            return BI_EXECUTED;
         }
+
+        int rc = chdir(cmd->argv[1]);
+
+        if (rc == 0) {
+            return BI_EXECUTED;
+        } else {
+            return BI_RC;
+        }
+
     }
     return BI_RC;
 }
@@ -215,59 +217,72 @@ int clear_cmd_buff(cmd_buff_t* cmd_buff) {
 int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
     int argc = 0;
     int argsLength = 0;
+    char* token = cmd_line;
+    char* arg = malloc(ARG_MAX);
 
     strcpy(cmd_buff->_cmd_buffer, cmd_line);
 
-
-    // get rid of leading and trailing whitespace
-    // convert tabs to spaces to make conversion easier
     stripLTWhiteSpace(cmd_line);
-    for (size_t i = 0; i < strlen(cmd_line); i++) {
-        if (cmd_line[i] == '\t') {
-            cmd_line[i] = SPACE_CHAR;
+    
+    // start tokenizing manually (since we need to handle quotes too)
+    while (*token != '\0') {
+        while (*token == ' ' || *token == '\t') {
+            token++;
+        }
+
+        // when we hit a quote, start copying everything until ending quote
+        if (*token == '"') {
+            token++;
+            int tempIndex = 0;
+
+            while (*token != '"' && *token != '\0') {
+                arg[tempIndex++] = *token;
+                token++;
+                argsLength++;
+            }
+            arg[tempIndex] = '\0';
+
+            // now we add the quote arg to the argv list
+            cmd_buff->argv[argc] = malloc(strlen(arg) + 1);
+            strcpy(cmd_buff->argv[argc], arg);
+            argc++;
+
+            if (*token == '"') {
+                token++;
+            }
+        }
+        else {
+            // otherwise we handle the token regularly
+            int temp_index = 0;
+            while (*token != '\0' && !(*token == ' ' || *token == '\t')) {
+                arg[temp_index++] = *token;
+                token++;
+                argsLength++;
+            }
+            arg[temp_index] = '\0'; 
+
+            if (temp_index > 0) {
+                cmd_buff->argv[argc] = malloc(strlen(arg) + 1);
+                strcpy(cmd_buff->argv[argc], arg);
+                argc++;
+            }
+        }
+
+        while (*token == ' ' || *token == '\t') {
+            token++;
         }
     }
 
-
-    // isolate exe arg
-    char* token = strtok(cmd_line, SPACE_STRING);
-
-    if (strlen(token) > EXE_MAX) {
+    if (argsLength > ARG_MAX) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
-    cmd_buff->argv[argc] = malloc(strlen(token) + 1);
-    strcpy(cmd_buff->argv[argc], token);
-    argc++;
-
-
-    // isolate and 'normalize' args by removing whitespace and writing to new 
-    // arg buffer separating by a single space between each arg
-    while (token != NULL) {
-        token = strtok(NULL, SPACE_STRING);
-
-        // we are done so break
-        if (token == NULL) {
-            break;
-        }
-
-        stripLTWhiteSpace(token);
-
-        argsLength += strlen(token);
-
-        if (argsLength > ARG_MAX) {
-            return ERR_CMD_OR_ARGS_TOO_BIG;
-        }
-
-        cmd_buff->argv[argc] = malloc(strlen(token) + 1);
-        strcpy(cmd_buff->argv[argc], token);
-        argc++;
-    }
-
-    cmd_buff->argc = argc-1;
-
+    cmd_buff->argc = argc;
+    free(arg);
     return OK;
 }
+
+
 
 /*  - Takes in character pointer
 *   - Removes all LEADING and TRAILING whitespace only
