@@ -87,7 +87,6 @@ int exec_local_cmd_loop() {
         if (rc < 0) {
             if (rc == OK_EXIT) {
                 free_cmd_buff(&cmd);
-                free(cmd_buff);
                 return OK;
             } else {
                 return rc;
@@ -129,8 +128,8 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
         print_dragon();
         return BI_EXECUTED;
     } else if (type == BI_CMD_CD) {
-        if (cmd->argc == 1) {
-            return BI_EXECUTED;
+        if (cmd->argc != 1) {
+            return BI_RC;
         } else {
             int rc = chdir(cmd->argv[1]);
 
@@ -152,14 +151,15 @@ int exec_cmd(cmd_buff_t* cmd) {
 
         pRes = fork();
         if (pRes < 0) {
-            perror("Error starting fork child process.");
+            perror("Error starting fork child process");
             return ERR_EXEC_CMD;
         }
 
         if (pRes == 0) {
-            int rc = execv(cmd->argv[0], cmd->argv);
+
+            int rc = execvp(cmd->argv[0], cmd->argv);
             if (rc < 0) {
-                perror("Error executing external command.");
+                perror("Error executing external command");
                 return ERR_EXEC_CMD;
             }
         } else {
@@ -179,19 +179,33 @@ int exec_cmd(cmd_buff_t* cmd) {
 }
 
 int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
-    cmd_buff  = (cmd_buff_t*) malloc(sizeof(cmd_buff_t));
-
-    if (cmd_buff == NULL) {
+    cmd_buff->_cmd_buffer = malloc(SH_CMD_MAX);
+    if (cmd_buff->_cmd_buffer == NULL) {
         return ERR_MEMORY;
+    }
+
+    for (int i = 0; i < CMD_ARGV_MAX; i++) {
+        cmd_buff->argv[i] = NULL;
     }
 
     return OK;
 }
 
+
 int free_cmd_buff(cmd_buff_t* cmd_buff) {
-    free(cmd_buff);
+    for (int i = 0; i < cmd_buff->argc; i++) {
+        if (cmd_buff->argv[i] != NULL) {
+            free(cmd_buff->argv[i]);
+        }
+    }
+
+    if (cmd_buff->_cmd_buffer != NULL) {
+        free(cmd_buff->_cmd_buffer);
+    }
+
     return OK;
 }
+
 
 int clear_cmd_buff(cmd_buff_t* cmd_buff) {
     memset(cmd_buff, '\0', sizeof(*cmd_buff));
@@ -201,6 +215,9 @@ int clear_cmd_buff(cmd_buff_t* cmd_buff) {
 int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
     int argc = 0;
     int argsLength = 0;
+
+    strcpy(cmd_buff->_cmd_buffer, cmd_line);
+
 
     // get rid of leading and trailing whitespace
     // convert tabs to spaces to make conversion easier
@@ -219,7 +236,9 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
-    strcpy(cmd_buff->argv[argc++], token);
+    cmd_buff->argv[argc] = malloc(strlen(token) + 1);
+    strcpy(cmd_buff->argv[argc], token);
+    argc++;
 
 
     // isolate and 'normalize' args by removing whitespace and writing to new 
@@ -240,9 +259,12 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
             return ERR_CMD_OR_ARGS_TOO_BIG;
         }
 
-        strcpy(cmd_buff->argv[argc++], token);
-
+        cmd_buff->argv[argc] = malloc(strlen(token) + 1);
+        strcpy(cmd_buff->argv[argc], token);
+        argc++;
     }
+
+    cmd_buff->argc = argc-1;
 
     return OK;
 }
