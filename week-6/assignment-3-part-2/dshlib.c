@@ -53,12 +53,15 @@
  */
 int exec_local_cmd_loop() {
 
-    char *cmd_buff = malloc(SH_CMD_MAX);
+    // initialize variabels
+    char* cmd_buff = malloc(SH_CMD_MAX);
     int rc = 0;
     cmd_buff_t cmd;
 
+    // run our loop
     while (1) {
 
+        // get input
         printf("%s", SH_PROMPT);
         if (fgets(cmd_buff, SH_CMD_MAX, stdin) == NULL) {
             printf("\n");
@@ -68,46 +71,46 @@ int exec_local_cmd_loop() {
         // remove the trailing \n from cmd_buff
         cmd_buff[strcspn(cmd_buff, "\n")] = '\0';
 
+        // make sure there is something to parse, else continue
         if (strlen(cmd_buff) == 0) {
             printf(CMD_WARN_NO_CMD);
             continue;
         }
 
+        // allocate cmd struct and check all went well
         rc = alloc_cmd_buff(&cmd);
         if (rc != OK) {
             return rc;
         }
 
+        // populate struct based on input and check all went well
         rc = build_cmd_buff(cmd_buff, &cmd);
         if (rc < 0) {
             return rc;
         }
 
+        // execute command based on struct and check all went well
         rc = exec_cmd(&cmd);
         if (rc < 0) {
+            // if we wish to exit, free then exit
             if (rc == OK_EXIT) {
                 free_cmd_buff(&cmd);
                 return OK;
+            // otherwise show our error code
             } else {
                 return rc;
             }
         }
 
+        // clear the buff after each command to restart
         clear_cmd_buff(&cmd);
     }
-
-    // TODO IMPLEMENT parsing input to cmd_buff_t *cmd_buff
-
-    // TODO IMPLEMENT if built-in command, execute builtin logic for exit, cd (extra credit: dragon)
-    // the cd command should chdir to the provided directory; if no directory is provided, do nothing
-
-    // TODO IMPLEMENT if not built-in command, fork/exec as an external command
-    // for example, if the user input is "ls -l", you would fork/exec the command "ls" with the arg "-l"
 
     return OK;
 }
 
 Built_In_Cmds match_command(const char* input) {
+    // run through different string matches
     if (strcmp(input, "exit") == 0) {
         return BI_CMD_EXIT;
     } else if (strcmp(input, "dragon") == 0) {
@@ -122,6 +125,7 @@ Built_In_Cmds match_command(const char* input) {
 Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
     Built_In_Cmds type = match_command(cmd->argv[0]);
 
+    // if we are using exit, exit, otherwise call existing dragon function or cd using syscall
     if (type == BI_CMD_EXIT) {
         return BI_RC;
     } else if (type == BI_CMD_DRAGON) {
@@ -135,6 +139,7 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
 
         int rc = chdir(cmd->argv[1]);
 
+        // if we cd'd correctly, say we execited, else return code
         if (rc == 0) {
             return BI_EXECUTED;
         } else {
@@ -148,6 +153,7 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
 int exec_cmd(cmd_buff_t* cmd) {
     Built_In_Cmds type = match_command(cmd->argv[0]);
 
+    // if we dont have a built-in, fork and execute using syscalls
     if (type == BI_NOT_BI) {
         int pRes, cRes;
 
@@ -170,6 +176,7 @@ int exec_cmd(cmd_buff_t* cmd) {
         }
 
     } else {
+        // otherwise we use the built-in call
         Built_In_Cmds rc = exec_built_in_cmd(cmd);
         if (rc == BI_RC) {
             return OK_EXIT;
@@ -181,11 +188,13 @@ int exec_cmd(cmd_buff_t* cmd) {
 }
 
 int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
+    // allocate buffer for copy
     cmd_buff->_cmd_buffer = malloc(SH_CMD_MAX);
     if (cmd_buff->_cmd_buffer == NULL) {
         return ERR_MEMORY;
     }
 
+    // allocate memory for string pointers
     for (int i = 0; i < CMD_ARGV_MAX; i++) {
         cmd_buff->argv[i] = NULL;
     }
@@ -195,12 +204,14 @@ int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
 
 
 int free_cmd_buff(cmd_buff_t* cmd_buff) {
+    // iterate through each string, free it
     for (int i = 0; i < cmd_buff->argc; i++) {
         if (cmd_buff->argv[i] != NULL) {
             free(cmd_buff->argv[i]);
         }
     }
 
+    // free command buffer
     if (cmd_buff->_cmd_buffer != NULL) {
         free(cmd_buff->_cmd_buffer);
     }
@@ -210,6 +221,7 @@ int free_cmd_buff(cmd_buff_t* cmd_buff) {
 
 
 int clear_cmd_buff(cmd_buff_t* cmd_buff) {
+    // write the entire struct back to null terminations
     memset(cmd_buff, '\0', sizeof(*cmd_buff));
     return OK;
 }
@@ -217,27 +229,29 @@ int clear_cmd_buff(cmd_buff_t* cmd_buff) {
 int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
     int argc = 0;
     int argsLength = 0;
-    char* token = cmd_line;
+    char* charPtr = cmd_line;
     char* arg = malloc(ARG_MAX);
 
+    // populate the _cmd_buffer
     strcpy(cmd_buff->_cmd_buffer, cmd_line);
 
     stripLTWhiteSpace(cmd_line);
     
     // start tokenizing manually (since we need to handle quotes too)
-    while (*token != '\0') {
-        while (*token == ' ' || *token == '\t') {
-            token++;
+    while (*charPtr != '\0') {
+        while (*charPtr == ' ' || *charPtr == '\t') {
+            charPtr++;
         }
 
         // when we hit a quote, start copying everything until ending quote
-        if (*token == '"') {
-            token++;
+        if (*charPtr == '"') {
+            charPtr++;
             int tempIndex = 0;
 
-            while (*token != '"' && *token != '\0') {
-                arg[tempIndex++] = *token;
-                token++;
+            // copy over each character until we hit a quote or end string
+            while (*charPtr != '"' && *charPtr != '\0') {
+                arg[tempIndex++] = *charPtr;
+                charPtr++;
                 argsLength++;
             }
             arg[tempIndex] = '\0';
@@ -247,16 +261,15 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
             strcpy(cmd_buff->argv[argc], arg);
             argc++;
 
-            if (*token == '"') {
-                token++;
+            if (*charPtr == '"') {
+                charPtr++;
             }
-        }
-        else {
+        } else {
             // otherwise we handle the token regularly
             int temp_index = 0;
-            while (*token != '\0' && !(*token == ' ' || *token == '\t')) {
-                arg[temp_index++] = *token;
-                token++;
+            while (*charPtr != '\0' && !(*charPtr == ' ' || *charPtr == '\t')) {
+                arg[temp_index++] = *charPtr;
+                charPtr++;
                 argsLength++;
             }
             arg[temp_index] = '\0'; 
@@ -268,8 +281,9 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
             }
         }
 
-        while (*token == ' ' || *token == '\t') {
-            token++;
+        // move to the next token
+        while (*charPtr == ' ' || *charPtr == '\t') {
+            charPtr++;
         }
     }
 
@@ -277,6 +291,7 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
+    // set number of args and free memory
     cmd_buff->argc = argc;
     free(arg);
     return OK;
