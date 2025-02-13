@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include "dshlib.h"
 
 /*
@@ -86,20 +87,23 @@ int exec_local_cmd_loop() {
         // populate struct based on input and check all went well
         rc = build_cmd_buff(cmd_buff, &cmd);
         if (rc < 0) {
+            if (rc == ERR_CMD_ARGS_BAD) {
+                printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
+                continue;
+            } 
             return rc;
         }
 
         // execute command based on struct and check all went well
         rc = exec_cmd(&cmd);
-        if (rc < 0) {
-            // if we wish to exit, free then exit
-            if (rc == OK_EXIT) {
-                free_cmd_buff(&cmd);
-                return OK;
-            // otherwise show our error code
-            } else {
-                return rc;
-            }
+        if (rc == OK_EXIT) {
+            free_cmd_buff(&cmd);
+            return OK;
+        } else if (rc < 0) {
+            // show error message for non exit commands
+
+            free_cmd_buff(&cmd);
+            return rc;
         }
 
         // clear the buff after each command to restart
@@ -117,6 +121,8 @@ Built_In_Cmds match_command(const char* input) {
         return BI_CMD_DRAGON;
     } else if (strcmp(input, "cd") == 0) {
         return BI_CMD_CD;
+    } else if (strcmp(input, "rc") == 0) {
+        return BI_RC;
     } else {
         return BI_NOT_BI;
     }
@@ -127,27 +133,22 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
 
     // if we are using exit, exit, otherwise call existing dragon function or cd using syscall
     if (type == BI_CMD_EXIT) {
-        return BI_RC;
+        return BI_CMD_EXIT;
     } else if (type == BI_CMD_DRAGON) {
         print_dragon();
         return BI_EXECUTED;
     } else if (type == BI_CMD_CD) {
-
         if (cmd->argc == 1) {
             return BI_EXECUTED;
         }
-
-        int rc = chdir(cmd->argv[1]);
-
-        // if we cd'd correctly, say we execited, else return code
-        if (rc == 0) {
-            return BI_EXECUTED;
-        } else {
-            return BI_RC;
-        }
-
+        chdir(cmd->argv[1]);
+        return BI_EXECUTED;
+    } else if (type == BI_RC) {
+        int savedErrno = errno;
+        printf("%d\n", savedErrno);
+        return BI_EXECUTED;
     }
-    return BI_RC;
+    return BI_EXECUTED;
 }
 
 int exec_cmd(cmd_buff_t* cmd) {
@@ -159,26 +160,38 @@ int exec_cmd(cmd_buff_t* cmd) {
 
         pRes = fork();
         if (pRes < 0) {
-            perror("Error starting fork child process");
-            return ERR_EXEC_CMD;
+            return pRes;
         }
 
         if (pRes == 0) {
 
             int rc = execvp(cmd->argv[0], cmd->argv);
             if (rc < 0) {
-                perror("Error executing external command");
-                return ERR_EXEC_CMD;
+                // Capture and handle execvp error
+                int exec_errno = errno; 
+                switch (exec_errno) {
+                    case ENOENT:
+                        printf("Command not found in PATH\n");
+                        break;
+                    case EACCES:
+                        printf("Permission denied to execute command\n");
+                        break;
+                    default:
+                        printf("Error executing external command\n");
+                        break;
+                }
+                exit(errno);
             }
         } else {
             wait(&cRes);
-            return WEXITSTATUS(cRes);
+            errno = WEXITSTATUS(cRes);
+            return errno;
         }
 
     } else {
         // otherwise we use the built-in call
         Built_In_Cmds rc = exec_built_in_cmd(cmd);
-        if (rc == BI_RC) {
+        if (rc == BI_CMD_EXIT) {
             return OK_EXIT;
         } else {
             return OK;
@@ -204,12 +217,6 @@ int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
 
 
 int free_cmd_buff(cmd_buff_t* cmd_buff) {
-    // iterate through each string, free it
-    for (int i = 0; i < cmd_buff->argc; i++) {
-        if (cmd_buff->argv[i] != NULL) {
-            free(cmd_buff->argv[i]);
-        }
-    }
 
     // free command buffer
     if (cmd_buff->_cmd_buffer != NULL) {
@@ -228,72 +235,50 @@ int clear_cmd_buff(cmd_buff_t* cmd_buff) {
 
 int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
     int argc = 0;
-    int argsLength = 0;
-    char* charPtr = cmd_line;
-    char* arg = malloc(ARG_MAX);
+    stripLTWhiteSpace(cmd_line);
 
     // populate the _cmd_buffer
     strcpy(cmd_buff->_cmd_buffer, cmd_line);
 
-    stripLTWhiteSpace(cmd_line);
+    char* charPtr = cmd_buff->_cmd_buffer; 
+    int length = 0;
+    int quoteMode = 0;
     
-    // start tokenizing manually (since we need to handle quotes too)
     while (*charPtr != '\0') {
-        while (*charPtr == ' ' || *charPtr == '\t') {
-            charPtr++;
+        if (*charPtr == '"' && !quoteMode) {
+            *charPtr = '\0';
+            quoteMode = 1;
+        } else if (*charPtr == '"' && quoteMode){
+            quoteMode = 0;
+            *charPtr = '\0';
+        } else if (*charPtr == ' ' && !quoteMode) {
+            *charPtr = '\0';
         }
-
-        // when we hit a quote, start copying everything until ending quote
-        if (*charPtr == '"') {
-            charPtr++;
-            int tempIndex = 0;
-
-            // copy over each character until we hit a quote or end string
-            while (*charPtr != '"' && *charPtr != '\0') {
-                arg[tempIndex++] = *charPtr;
-                charPtr++;
-                argsLength++;
-            }
-            arg[tempIndex] = '\0';
-
-            // now we add the quote arg to the argv list
-            cmd_buff->argv[argc] = malloc(strlen(arg) + 1);
-            strcpy(cmd_buff->argv[argc], arg);
-            argc++;
-
-            if (*charPtr == '"') {
-                charPtr++;
-            }
-        } else {
-            // otherwise we handle the token regularly
-            int temp_index = 0;
-            while (*charPtr != '\0' && !(*charPtr == ' ' || *charPtr == '\t')) {
-                arg[temp_index++] = *charPtr;
-                charPtr++;
-                argsLength++;
-            }
-            arg[temp_index] = '\0'; 
-
-            if (temp_index > 0) {
-                cmd_buff->argv[argc] = malloc(strlen(arg) + 1);
-                strcpy(cmd_buff->argv[argc], arg);
-                argc++;
-            }
-        }
-
-        // move to the next token
-        while (*charPtr == ' ' || *charPtr == '\t') {
-            charPtr++;
-        }
+        charPtr++;
+        length++;
     }
 
-    if (argsLength > ARG_MAX) {
+    for (int i = 0; i < length; i++) {
+        if (argc > CMD_MAX) {
+            return ERR_CMD_ARGS_BAD;
+        }
+
+        if (i == 0 || (cmd_buff->_cmd_buffer[i-1] == '\0' && cmd_buff->_cmd_buffer[i] != '\0')) {
+            cmd_buff->argv[argc] = &cmd_buff->_cmd_buffer[i];
+            argc++;
+        }
+    }
+    
+    if (length > ARG_MAX) {
+        return ERR_CMD_OR_ARGS_TOO_BIG;
+    }
+
+    if (strlen(cmd_buff->argv[0]) > 64) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
     // set number of args and free memory
     cmd_buff->argc = argc;
-    free(arg);
     return OK;
 }
 
