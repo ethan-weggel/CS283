@@ -16,26 +16,26 @@
 
 5. In the referenced demo code we used WEXITSTATUS(). What information does this provide, and why is it important?
 
-    > **Answer**: 
+    > **Answer**: `WEXITSTATUS()` allows us to extract the return code of a child process via `wait()` or `waitpid()`. This is important because it makes finding out if the child process was successful or not much easier.
 
 6. Describe how your implementation of build_cmd_buff() handles quoted arguments. Why is this necessary?
 
-    > **Answer**:  _start here_
+    > **Answer**:  In my implementation of `build_cmd_buff()`, I iterate through the entire _cmd_buff string character by character. At each character I will ask "is this a quote?" and if so, then I will toggle into quote mode and continued coping *every* character I see, not omitting whitespace. Then I toggle back off quote mode when I see another quote and continue to the end. This is necessary because by default we split on spaces, but we might want to pass an argument that contains spaces in it to our program. In the example of echo, we could use `echo "  hello    world  "` and our quote mode will preserve those whitespace characters.
 
 7. What changes did you make to your parsing logic compared to the previous assignment? Were there any unexpected challenges in refactoring your old code?
 
-    > **Answer**:  _start here_
+    > **Answer**:  There were no unexpected challenges, but I did have to refactor more than I originally thought. The first assignment I broke down the entire command buffer into truncated chunks of sub-commands, then would strtok() each sub-command into its exe and args. I accomplished this with speicialized functions I wrote. Now we are much more robust for sub-command parsing as I can iterate once in a single function since our data structure is now different. Now I simply replace white space with null bytes and assign pointers to substrings in a character array that is stored in the same data structure rather than manually allocating the memory. I suspect in future assignments I could combine the logic so I could quickly and efficiently split command buffers into sub-commands and then use my new tactic to parse the sub-commands.
 
 8. For this quesiton, you need to do some research on Linux signals. You can use [this google search](https://www.google.com/search?q=Linux+signals+overview+site%3Aman7.org+OR+site%3Alinux.die.net+OR+site%3Atldp.org&oq=Linux+signals+overview+site%3Aman7.org+OR+site%3Alinux.die.net+OR+site%3Atldp.org&gs_lcrp=EgZjaHJvbWUyBggAEEUYOdIBBzc2MGowajeoAgCwAgA&sourceid=chrome&ie=UTF-8) to get started.
 
 - What is the purpose of signals in a Linux system, and how do they differ from other forms of interprocess communication (IPC)?
 
-    > **Answer**:  _start here_
+    > **Answer**:  The purpose of a signal in a Linux system is to send notifications via the kernel to signal events such as termination or interruption. Signals are different than interprocess communication because signals are sent asynchronously and are lightweight. They also do not send or transfer data, just notifications.
 
 - Find and describe three commonly used signals (e.g., SIGKILL, SIGTERM, SIGINT). What are their typical use cases?
 
-    > **Answer**:  _start here_
+    > **Answer**:  Three commonly used signals are SIGKILL (9), SIGNTERM (15) and SIGINT (2). SIGKILL is used to immediately terminate a process and cannot be ignored until later. This is good for forcibly stopping a program in an emergency. SIGTERM is a more polite version of SIGKILL and is preferred over it generally since SIGTERM allos the process to terminate itself allowing things like cleanup and freeing memory and stopping other subprocesses. SIGINT is known as a process interruption. This is what happens when the user presses ctrl+c. It can be handled or ignored by the program as well.
 
 - What happens when a process receives SIGSTOP? Can it be caught or ignored like SIGINT? Why or why not?
 
-    > **Answer**:  _start here_
+    > **Answer**:  SIGSTOP is used to pause a process immediately. It doesn't force quit, but will stop it in place. Unlike SIGINT, which can be ignored, SIGSTOP is enforced by the kernel so it cannot be ignored and the process receiving the notification must immediately comply. 
