@@ -1,6 +1,11 @@
 {
     "files.associations": {
         "string_view": "c",
-        "sstream": "c"
+        "sstream": "c",
+        "memory_resource": "c",
+        "errno.h": "c",
+        "error_t.h": "c",
+        "features.h": "c",
+        "string.h": "c"
     }
 }
