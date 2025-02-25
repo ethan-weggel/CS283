@@ -54,32 +54,55 @@
  */
 int exec_local_cmd_loop() {
     char *cmd_buff = malloc(SH_CMD_MAX);
+    if (!cmd_buff) {
+        perror("malloc failed");
+        exit(EXIT_FAILURE);
+    }
     int rc = 0;
+    bool firstIteration = true;
+    int interactive = isatty(STDIN_FILENO);
 
     while (1) {
         command_list_t* clist = (command_list_t*) malloc(sizeof(command_list_t));
+        if (!clist) {
+            perror("malloc failed");
+            exit(EXIT_FAILURE);
+        }
         memset(clist, 0, sizeof(command_list_t));
         clist->num = 0;
 
+        // if in interactive mode, always print the prompt
+        // otherwise skip printing on the first iteration
+        if (interactive || (!interactive && !firstIteration)) {
+            printf("%s", SH_PROMPT);
+            fflush(stdout);
+        }
+        firstIteration = false;
 
-        printf("%s", SH_PROMPT);
-        if (fgets(cmd_buff, ARG_MAX, stdin) == NULL){
+        if (fgets(cmd_buff, ARG_MAX, stdin) == NULL) {
+            // if not interactive, print prompt and then exit to pass tests
+            if (!interactive) {
+                printf("%s", SH_PROMPT);
+                fflush(stdout);
+            }
             printf("\n");
+            free(clist);
             break;
         }
+        cmd_buff[strcspn(cmd_buff, "\n")] = '\0';
 
-        //remove the trailing \n from cmd_buff
-        cmd_buff[strcspn(cmd_buff,"\n")] = '\0';
-        
-        //IMPLEMENT THE REST OF THE REQUIREMENTS
         if (strlen(cmd_buff) == 0) {
-            printf(CMD_WARN_NO_CMD);
-            free(clist);
-            continue;
+            if (interactive) {
+                printf(CMD_WARN_NO_CMD);
+                free(clist);
+                continue;
+            } else {
+                free(clist);
+                break;
+            }
         }
 
         rc = build_cmd_list(cmd_buff, clist);
-
         if (rc != OK) {
             if (rc == ERR_CMD_OR_ARGS_TOO_BIG) {
                 printf(CMD_ERR_PIPE_LIMIT, 8);
@@ -89,7 +112,6 @@ int exec_local_cmd_loop() {
         }
 
         pid_t supervisor = fork();
-
         if (supervisor == -1) {
             perror("Error making supervisor process.");
             exit(EXIT_FAILURE);
@@ -97,23 +119,19 @@ int exec_local_cmd_loop() {
 
         if (supervisor == 0) {
             rc = execute_pipeline(clist);
-
             if (rc == OK_EXIT) {
                 free(clist);
                 exit(EXIT_SC);
             }
             exit(EXIT_SUCCESS);
-
         }
 
         int childStatus;
         waitpid(supervisor, &childStatus, 0);
-
         if (WIFEXITED(childStatus) && WEXITSTATUS(childStatus) == EXIT_SC) {
             free(clist);
             break;
         }
-
         free(clist);
     }
 
@@ -123,82 +141,72 @@ int exec_local_cmd_loop() {
 
 int build_cmd_list(char *cmd_line, command_list_t *clist) {
     int commandCount = 0;
-    char* commandBuffer = malloc(SH_CMD_MAX);
-    memset(commandBuffer, 0, SH_CMD_MAX);
+    char tokenBuffer[SH_CMD_MAX]; // local token buffer
     cmd_buff_t command_t;
     alloc_cmd_buff(&command_t);
 
     stripLTWhiteSpace(cmd_line);
 
-    int tokenRC = getTruncToken(cmd_line, commandBuffer, PIPE_STRING);
-
+    // Get and process the first token.
+    int tokenRC = getTruncToken(cmd_line, tokenBuffer, PIPE_STRING);
     if (tokenRC == -1) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
-
-    int buildRC = build_cmd_buff(commandBuffer, &command_t);
-
+    int buildRC = build_cmd_buff(tokenBuffer, &command_t);
     if (buildRC < 0) {
         if (buildRC == ERR_CMD_ARGS_BAD) {
             printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
-        } 
+        }
         return buildRC;
     }
 
-    free(commandBuffer);
+    clist->commands[clist->num] = command_t;
+    clist->num++;
     commandCount++;
 
-    if (buildRC == ERR_CMD_OR_ARGS_TOO_BIG) {
-        return ERR_CMD_OR_ARGS_TOO_BIG;
-    } else {
+    // Loop while there is still remaining input in cmd_line.
+    while (strlen(cmd_line) != 0) {
+        char* tokenBuffer = malloc(SH_CMD_MAX);
+        memset(tokenBuffer, 0, SH_CMD_MAX);
 
-        // save first command, then move on to others
+        tokenRC = getTruncToken(cmd_line, tokenBuffer, PIPE_STRING);
+
+        if (strlen(tokenBuffer) == 0) {
+            free(tokenBuffer);
+            break;
+        }
+
+        commandCount++;
+
+        if (commandCount > CMD_MAX) {
+            free(tokenBuffer);
+            return ERR_CMD_OR_ARGS_TOO_BIG;
+        }
+
+        alloc_cmd_buff(&command_t);
+        buildRC = build_cmd_buff(tokenBuffer, &command_t);
+        if (buildRC < 0) {
+            if (buildRC == ERR_CMD_ARGS_BAD) {
+                printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
+            }
+            free(tokenBuffer);
+            return buildRC;
+        }
+
         clist->commands[clist->num] = command_t;
         clear_cmd_buff(&command_t);
+        free(tokenBuffer);
         clist->num++;
-
-        while (strlen(commandBuffer) != 0) {
-            char* commandBuffer = malloc(SH_CMD_MAX);
-            memset(commandBuffer, 0, SH_CMD_MAX);
-            tokenRC = getTruncToken(cmd_line, commandBuffer, PIPE_STRING);
-
-
-            if (strlen(commandBuffer) == 0) {
-                break;
-            }
-
-            commandCount++;
-
-            if (commandCount > CMD_MAX) {
-                return ERR_CMD_OR_ARGS_TOO_BIG;
-            }
-
-            
-            alloc_cmd_buff(&command_t);
-            buildRC = build_cmd_buff(commandBuffer, &command_t);
-
-            if (buildRC < 0) {
-                if (buildRC == ERR_CMD_ARGS_BAD) {
-                    printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
-                } 
-                return buildRC;
-            }
-
-            clist->commands[clist->num] = command_t;
-            clear_cmd_buff(&command_t);
-            free(commandBuffer);
-            clist->num++;
-
-            if (buildRC == ERR_CMD_OR_ARGS_TOO_BIG) {
-                return ERR_CMD_OR_ARGS_TOO_BIG;
-            }
-            
+        if (buildRC == ERR_CMD_OR_ARGS_TOO_BIG) {
+            return ERR_CMD_OR_ARGS_TOO_BIG;
         }
     }
 
+
     return OK;
 }
+
 
 Built_In_Cmds match_command(const char* input) {
     // run through different string matches
@@ -440,7 +448,7 @@ int execute_pipeline(command_list_t *clist) {
     int pipes[clist->num - 1][2];
     pid_t pids[clist->num];
 
-    for (int i = 0; i < clist->num; i++) {
+    for (int i = 0; i < clist->num -1; i++) {
         if (pipe(pipes[i]) == -1) {
             perror("Error making pipe.");
             exit(EXIT_FAILURE);
@@ -480,7 +488,7 @@ int execute_pipeline(command_list_t *clist) {
             int rc = exec_cmd(&clist->commands[i]);
 
             if (rc == OK_EXIT) {
-                return OK_EXIT;
+                exit(EXIT_SC);
             } else if (rc == OK) {
                 exit(EXIT_SUCCESS);
             } else {

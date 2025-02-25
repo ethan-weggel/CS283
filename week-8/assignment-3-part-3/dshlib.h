@@ -36,7 +36,7 @@ typedef struct command{
 typedef struct command_list{
     int num;
     cmd_buff_t commands[CMD_MAX];
-}command_list_t;
+} command_list_t;
 
 //Special character #defines
 #define SPACE_CHAR  ' '
@@ -44,6 +44,9 @@ typedef struct command_list{
 #define PIPE_CHAR   '|'
 #define PIPE_STRING "|"
 #define QUOTE_STRING "\""
+#define REDIR_STDOUT ">"
+#define REDIR_STDIN "<"
+#define STDOUT_APPEND ">>"
 
 #define SH_PROMPT "dsh3> "
 #define EXIT_CMD "exit"
