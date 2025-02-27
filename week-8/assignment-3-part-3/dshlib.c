@@ -106,8 +106,15 @@ int exec_local_cmd_loop() {
 }
 
 
+/*
+ * function: build_cmd_list
+ * purpose: parses a command line into separate commands split by pipe symbols
+ * parameters:
+ *    cmd_line: the raw command line input
+ *    clist: pointer to a command_list_t to populate
+ * returns: ok on success, error code on failure
+ */
 int build_cmd_list(char *cmd_line, command_list_t *clist) {
-    // printf("1\n");
     int commandCount = 0;
     char tokenBuffer[SH_CMD_MAX]; // local token buffer
     cmd_buff_t command_t;
@@ -117,14 +124,13 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 
     // Get and process the first token.
     int tokenRC = getTruncToken(cmd_line, tokenBuffer, PIPE_STRING);
-    // printf("token -> %s\n", tokenBuffer);
-    // printf("2\n");
+
     if (tokenRC == -1) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
     int buildRC = build_cmd_buff(tokenBuffer, &command_t);
-    // printf("3\n");
+
     if (buildRC < 0) {
         if (buildRC == ERR_CMD_ARGS_BAD) {
             printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
@@ -138,8 +144,6 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 
     // Loop while there is still remaining input in cmd_line.
     while (strlen(cmd_line) != 0) {
-        // printf("cmd -> %s\n", cmd_line);
-
 
         stripLTWhiteSpace(cmd_line);
         if (strlen(cmd_line) == 0) {
@@ -190,7 +194,13 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
     return OK;
 }
 
-
+/*
+ * function: match_command
+ * purpose: determines if the input is a built-in command
+ * parameters:
+ *    input: string for command name
+ * returns: a Built_In_Cmds enum indicating the built-in type or bi_not_bi
+ */
 Built_In_Cmds match_command(const char* input) {
     // run through different string matches
     if (strcmp(input, "exit") == 0) {
@@ -206,6 +216,14 @@ Built_In_Cmds match_command(const char* input) {
     }
 }
 
+
+/*
+ * function: exec_built_in_cmd
+ * purpose: runs the specified built-in command (cd, exit, etc.)
+ * parameters:
+ *    cmd: a pointer to the cmd_buff_t containing arguments
+ * returns: a Built_In_Cmds enum result indicating execution or exit
+ */
 Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
     Built_In_Cmds type = match_command(cmd->argv[0]);
 
@@ -229,6 +247,14 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
     return BI_EXECUTED;
 }
 
+
+/*
+ * function: exec_cmd
+ * purpose: handles built-in vs external commands; external commands are executed via execvp
+ * parameters:
+ *    cmd: a pointer to the cmd_buff_t with argv data
+ * returns: ok_exit for exit, ok on success, otherwise error code
+ */
 int exec_cmd(cmd_buff_t* cmd) {
     Built_In_Cmds type = match_command(cmd->argv[0]);
 
@@ -251,6 +277,13 @@ int exec_cmd(cmd_buff_t* cmd) {
 }
 
 
+/*
+ * function: alloc_cmd_buff
+ * purpose: allocates memory for the cmd_buff_t's _cmd_buffer and argv
+ * parameters:
+ *    cmd_buff: pointer to cmd_buff_t
+ * returns: ok on success or err_memory on failure
+ */
 int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
     // allocate buffer for copy
     cmd_buff->_cmd_buffer = malloc(SH_CMD_MAX);
@@ -267,6 +300,13 @@ int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
 }
 
 
+/*
+ * function: free_cmd_buff
+ * purpose: frees the _cmd_buffer inside the cmd_buff_t
+ * parameters:
+ *    cmd_buff: pointer to cmd_buff_t
+ * returns: ok
+ */
 int free_cmd_buff(cmd_buff_t* cmd_buff) {
 
     // free command buffer
@@ -278,12 +318,28 @@ int free_cmd_buff(cmd_buff_t* cmd_buff) {
 }
 
 
+/*
+ * function: clear_cmd_buff
+ * purpose: zeroes out the cmd_buff_t structure
+ * parameters:
+ *    cmd_buff: pointer to cmd_buff_t
+ * returns: ok
+ */
 int clear_cmd_buff(cmd_buff_t* cmd_buff) {
     // write the entire struct back to null terminations
     memset(cmd_buff, '\0', sizeof(*cmd_buff));
     return OK;
 }
 
+
+/*
+ * function: build_cmd_buff
+ * purpose: tokenizes a line into argv entries and stores them in cmd_buff
+ * parameters:
+ *    cmd_line: the raw command line
+ *    cmd_buff: pointer to a cmd_buff_t to fill
+ * returns: ok on success, or an error code if arguments exceed capacity
+ */
 int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
     int argc = 0;
     stripLTWhiteSpace(cmd_line);
@@ -333,6 +389,14 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
     return OK;
 }
 
+
+/*
+ * function: stripLTWhiteSpace
+ * purpose: removes leading/trailing whitespace from the given string in-place
+ * parameters:
+ *    string: a c-string to modify
+ * returns: none
+ */
 void stripLTWhiteSpace(char* string) {
     if (*string == '\0') {
         return;
@@ -363,6 +427,16 @@ void stripLTWhiteSpace(char* string) {
     }
 }
 
+
+/*
+ * function: getTruncToken
+ * purpose: extracts a token from inputString up to the delimiter, then modifies inputString
+ * parameters:
+ *    inputString: the original line, advanced past the delimiter on return
+ *    tokenBuffer: the token read from inputString
+ *    delimiter: the delimiter (usually a pipe character)
+ * returns: 0 on success, -1 if there's an error
+ */
 int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter) {
     size_t delimiterIndex = strcspn(inputString, delimiter);
     size_t cpyIndex = 0;
@@ -400,6 +474,14 @@ int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter) {
     return 0; 
 }
 
+
+/*
+ * function: execute_pipeline
+ * purpose: if there's only one command and it's built-in, run in parent; else fork for each stage
+ * parameters:
+ *    clist: a pointer to command_list_t holding the pipeline commands
+ * returns: ok_exit for an exit request, or the final child's error code, or 0 on success
+ */
 int execute_pipeline(command_list_t *clist) {
     // ADDED: handle built-ins in parent if there's only one command
     if (clist->num == 1) {
@@ -486,10 +568,15 @@ int execute_pipeline(command_list_t *clist) {
     return pipelineStatus;
 }
 
-
+/*
+ * function: handle_redirections
+ * purpose: scans cmd->argv for redirection operators and opens/closes file descriptors
+ * parameters:
+ *    cmd: pointer to a cmd_buff_t to adjust
+ * returns: none (exits on error)
+ */
 void handle_redirections(cmd_buff_t *cmd) {
     int new_argc = 0;
-    /* Temporary array for the new argv list (without redirection tokens) */
     char *new_argv[CMD_ARGV_MAX];
 
     for (int i = 0; i < cmd->argc; i++) {
