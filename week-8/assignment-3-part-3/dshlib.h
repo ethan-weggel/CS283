@@ -75,6 +75,7 @@ int free_cmd_list(command_list_t *cmd_lst);
 void stripLTWhiteSpace(char* string);
 int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter);
 extern void print_dragon();
+void handle_redirections(cmd_buff_t *cmd);
 
 //built in command stuff
 typedef enum {

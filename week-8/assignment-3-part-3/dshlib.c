@@ -52,6 +52,74 @@
  *  Standard Library Functions You Might Want To Consider Using (assignment 2+)
  *      fork(), execvp(), exit(), chdir()
  */
+// int exec_local_cmd_loop() {
+//     char *cmd_buff = malloc(SH_CMD_MAX);
+//     if (!cmd_buff) {
+//         perror("malloc failed");
+//         exit(EXIT_FAILURE);
+//     }
+//     int rc = 0;
+
+//     while (1) {
+//         command_list_t* clist = (command_list_t*) malloc(sizeof(command_list_t));
+//         if (!clist) {
+//             perror("malloc failed");
+//             exit(EXIT_FAILURE);
+//         }
+//         memset(clist, 0, sizeof(command_list_t));
+//         clist->num = 0;
+
+//         printf("%s", SH_PROMPT);
+//         if (fgets(cmd_buff, ARG_MAX, stdin) == NULL) {
+//             printf("\n");
+//             break;
+//         }
+             
+//         cmd_buff[strcspn(cmd_buff, "\n")] = '\0';
+
+//         if (strlen(cmd_buff) == 0) {
+//             printf(CMD_WARN_NO_CMD);
+//             free(clist);
+//             continue;
+//         }
+
+//         rc = build_cmd_list(cmd_buff, clist);
+//         if (rc != OK) {
+//             if (rc == ERR_CMD_OR_ARGS_TOO_BIG) {
+//                 printf(CMD_ERR_PIPE_LIMIT, 8);
+//             }
+//             free(clist);
+//             continue;
+//         }
+
+//         pid_t supervisor = fork();
+//         if (supervisor == -1) {
+//             perror("Error making supervisor process.");
+//             exit(EXIT_FAILURE);
+//         }
+
+//         if (supervisor == 0) {
+//             rc = execute_pipeline(clist);
+//             if (rc == OK_EXIT) {
+//                 free(clist);
+//                 exit(EXIT_SC);
+//             }
+//             exit(EXIT_SUCCESS);
+//         }
+
+//         int childStatus;
+//         waitpid(supervisor, &childStatus, 0);
+//         if (WIFEXITED(childStatus) && WEXITSTATUS(childStatus) == EXIT_SC) {
+//             free(clist);
+//             break;
+//         }
+//         free(clist);
+//     }
+
+//     free(cmd_buff);
+//     return OK;
+// }
+
 int exec_local_cmd_loop() {
     char *cmd_buff = malloc(SH_CMD_MAX);
     if (!cmd_buff) {
@@ -59,8 +127,6 @@ int exec_local_cmd_loop() {
         exit(EXIT_FAILURE);
     }
     int rc = 0;
-    bool firstIteration = true;
-    int interactive = isatty(STDIN_FILENO);
 
     while (1) {
         command_list_t* clist = (command_list_t*) malloc(sizeof(command_list_t));
@@ -71,35 +137,18 @@ int exec_local_cmd_loop() {
         memset(clist, 0, sizeof(command_list_t));
         clist->num = 0;
 
-        // if in interactive mode, always print the prompt
-        // otherwise skip printing on the first iteration
-        if (interactive || (!interactive && !firstIteration)) {
-            printf("%s", SH_PROMPT);
-            fflush(stdout);
-        }
-        firstIteration = false;
-
+        printf("%s", SH_PROMPT);
         if (fgets(cmd_buff, ARG_MAX, stdin) == NULL) {
-            // if not interactive, print prompt and then exit to pass tests
-            if (!interactive) {
-                printf("%s", SH_PROMPT);
-                fflush(stdout);
-            }
             printf("\n");
-            free(clist);
             break;
         }
+
         cmd_buff[strcspn(cmd_buff, "\n")] = '\0';
 
         if (strlen(cmd_buff) == 0) {
-            if (interactive) {
-                printf(CMD_WARN_NO_CMD);
-                free(clist);
-                continue;
-            } else {
-                free(clist);
-                break;
-            }
+            printf(CMD_WARN_NO_CMD);
+            free(clist);
+            continue;
         }
 
         rc = build_cmd_list(cmd_buff, clist);
@@ -111,27 +160,12 @@ int exec_local_cmd_loop() {
             continue;
         }
 
-        pid_t supervisor = fork();
-        if (supervisor == -1) {
-            perror("Error making supervisor process.");
-            exit(EXIT_FAILURE);
-        }
-
-        if (supervisor == 0) {
-            rc = execute_pipeline(clist);
-            if (rc == OK_EXIT) {
-                free(clist);
-                exit(EXIT_SC);
-            }
-            exit(EXIT_SUCCESS);
-        }
-
-        int childStatus;
-        waitpid(supervisor, &childStatus, 0);
-        if (WIFEXITED(childStatus) && WEXITSTATUS(childStatus) == EXIT_SC) {
+        rc = execute_pipeline(clist);
+        if (rc == OK_EXIT) {
             free(clist);
             break;
         }
+
         free(clist);
     }
 
@@ -139,7 +173,9 @@ int exec_local_cmd_loop() {
     return OK;
 }
 
+
 int build_cmd_list(char *cmd_line, command_list_t *clist) {
+    // printf("1\n");
     int commandCount = 0;
     char tokenBuffer[SH_CMD_MAX]; // local token buffer
     cmd_buff_t command_t;
@@ -149,11 +185,14 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 
     // Get and process the first token.
     int tokenRC = getTruncToken(cmd_line, tokenBuffer, PIPE_STRING);
+    // printf("token -> %s\n", tokenBuffer);
+    // printf("2\n");
     if (tokenRC == -1) {
         return ERR_CMD_OR_ARGS_TOO_BIG;
     }
 
     int buildRC = build_cmd_buff(tokenBuffer, &command_t);
+    // printf("3\n");
     if (buildRC < 0) {
         if (buildRC == ERR_CMD_ARGS_BAD) {
             printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
@@ -167,6 +206,14 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 
     // Loop while there is still remaining input in cmd_line.
     while (strlen(cmd_line) != 0) {
+        // printf("cmd -> %s\n", cmd_line);
+
+
+        stripLTWhiteSpace(cmd_line);
+        if (strlen(cmd_line) == 0) {
+            break;
+        }
+
         char* tokenBuffer = malloc(SH_CMD_MAX);
         memset(tokenBuffer, 0, SH_CMD_MAX);
 
@@ -186,6 +233,7 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
 
         alloc_cmd_buff(&command_t);
         buildRC = build_cmd_buff(tokenBuffer, &command_t);
+
         if (buildRC < 0) {
             if (buildRC == ERR_CMD_ARGS_BAD) {
                 printf(CMD_ERR_PIPE_LIMIT, CMD_MAX);
@@ -194,13 +242,16 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
             return buildRC;
         }
 
+
         clist->commands[clist->num] = command_t;
         clear_cmd_buff(&command_t);
+
         free(tokenBuffer);
         clist->num++;
         if (buildRC == ERR_CMD_OR_ARGS_TOO_BIG) {
             return ERR_CMD_OR_ARGS_TOO_BIG;
         }
+
     }
 
 
@@ -249,42 +300,14 @@ Built_In_Cmds exec_built_in_cmd(cmd_buff_t* cmd) {
 int exec_cmd(cmd_buff_t* cmd) {
     Built_In_Cmds type = match_command(cmd->argv[0]);
 
-    // if we dont have a built-in, fork and execute using syscalls
     if (type == BI_NOT_BI) {
-        int pRes, cRes;
-
-        pRes = fork();
-        if (pRes < 0) {
-            return pRes;
-        }
-
-        if (pRes == 0) {
-
-            int rc = execvp(cmd->argv[0], cmd->argv);
-            if (rc < 0) {
-                // Capture and handle execvp error
-                int exec_errno = errno; 
-                switch (exec_errno) {
-                    case ENOENT:
-                        printf("Command not found in PATH\n");
-                        break;
-                    case EACCES:
-                        printf("Permission denied to execute command\n");
-                        break;
-                    default:
-                        printf("Error executing external command\n");
-                        break;
-                }
-                exit(errno);
-            }
-        } else {
-            wait(&cRes);
-            errno = WEXITSTATUS(cRes);
-            return errno;
-        }
-
+        // REMOVED second fork
+        handle_redirections(cmd);
+        // ADDED: directly exec here
+        execvp(cmd->argv[0], cmd->argv);
+        int exec_errno = errno;
+        exit(exec_errno);
     } else {
-        // otherwise we use the built-in call
         Built_In_Cmds rc = exec_built_in_cmd(cmd);
         if (rc == BI_CMD_EXIT) {
             return OK_EXIT;
@@ -294,6 +317,7 @@ int exec_cmd(cmd_buff_t* cmd) {
     }
     return OK;
 }
+
 
 int alloc_cmd_buff(cmd_buff_t* cmd_buff) {
     // allocate buffer for copy
@@ -445,6 +469,19 @@ int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter) {
 }
 
 int execute_pipeline(command_list_t *clist) {
+    // ADDED: handle built-ins in parent if there's only one command
+    if (clist->num == 1) {
+        cmd_buff_t *cmd = &clist->commands[0];
+        Built_In_Cmds type = match_command(cmd->argv[0]);
+        if (type != BI_NOT_BI) {
+            Built_In_Cmds rc = exec_built_in_cmd(cmd);
+            if (rc == BI_CMD_EXIT) {
+                return OK_EXIT;
+            }
+            return OK;
+        }
+    }
+
     int pipes[clist->num - 1][2];
     pid_t pids[clist->num];
 
@@ -457,36 +494,22 @@ int execute_pipeline(command_list_t *clist) {
 
     for (int i = 0; i < clist->num; i++) {
         pids[i] = fork();
-
-        // if there was an error
         if (pids[i] == -1) {
             perror("Error making child processes.");
             exit(EXIT_FAILURE);
         }
-
-        // if we are in the child process
         if (pids[i] == 0) {
-            
-            // setting up input pipe for all except first
             if (i > 0) {
                 dup2(pipes[i-1][0], STDIN_FILENO);
             }
-
-            // setting up output pipe for all except last
             if (i < clist->num - 1) {
                 dup2(pipes[i][1], STDOUT_FILENO);
             }
-
-            // close pipe ends in child processes
             for (int j = 0; j < clist->num - 1; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
             }
-
-            // execute
-            // execvp(clist->commands[i].argv[0], clist->commands[i].argv);
             int rc = exec_cmd(&clist->commands[i]);
-
             if (rc == OK_EXIT) {
                 exit(EXIT_SC);
             } else if (rc == OK) {
@@ -495,16 +518,13 @@ int execute_pipeline(command_list_t *clist) {
                 exit(EXIT_FAILURE);
             }
         }
-
     }
 
-    // close pipe ends in parent process
     for (int i = 0; i < clist->num - 1; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
 
-    // wait for the children to finish execution
     int pipelineStatus = EXIT_SUCCESS;
     int childStatus;
     for (int i = 0; i < clist->num; i++) {
@@ -512,7 +532,94 @@ int execute_pipeline(command_list_t *clist) {
         if (WIFEXITED(childStatus) && WEXITSTATUS(childStatus) == EXIT_SC) {
             pipelineStatus = OK_EXIT;
         }
+
+        if (WIFEXITED(childStatus) && WEXITSTATUS(childStatus)) {
+            switch (WEXITSTATUS(childStatus)) {
+                case ENOENT:
+                    printf("Command not found in PATH\n");
+                    errno = WEXITSTATUS(childStatus);
+                    return errno;
+                case EACCES:
+                    printf("Permission denied to execute command\n");
+                    errno = WEXITSTATUS(childStatus);
+                    return errno;
+                default:
+                    printf("Error executing external command\n");
+                    errno = WEXITSTATUS(childStatus);
+                    return errno;
+            }
+        }
     }
 
     return pipelineStatus;
+}
+
+
+void handle_redirections(cmd_buff_t *cmd) {
+    int new_argc = 0;
+    /* Temporary array for the new argv list (without redirection tokens) */
+    char *new_argv[CMD_ARGV_MAX];
+
+    for (int i = 0; i < cmd->argc; i++) {
+        if (strcmp(cmd->argv[i], REDIR_STDIN) == 0) {
+            // if we want to redirect stdin, open file for reading
+            if (i + 1 < cmd->argc) {
+                int fd = open(cmd->argv[i+1], O_RDONLY);
+                if (fd < 0) {
+                    perror("open for input");
+                    exit(1);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+                i++;
+                continue;
+            } else {
+                fprintf(stderr, "syntax error: expected filename after %s\n", REDIR_STDIN);
+                exit(1);
+            }
+        } else if (strcmp(cmd->argv[i], REDIR_STDOUT) == 0) {
+            // if we want to redirect stdout, open file for writing
+            if (i + 1 < cmd->argc) {
+                int fd = open(cmd->argv[i+1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (fd < 0) {
+                    perror("open for output");
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+                i++; 
+                continue;
+            } else {
+                fprintf(stderr, "syntax error: expected filename after %s\n", REDIR_STDOUT);
+                exit(1);
+            }
+        } else if (strcmp(cmd->argv[i], STDOUT_APPEND) == 0) {
+            // if we want to redirect stdout appending, open file for writing with no trunc
+            if (i + 1 < cmd->argc) {
+                int fd = open(cmd->argv[i+1], O_WRONLY | O_CREAT | O_APPEND, 0644);
+                if (fd < 0) {
+                    perror("open for output append");
+                    exit(1);
+                }
+                dup2(fd, STDOUT_FILENO);
+                close(fd);
+                i++; 
+                continue;
+            } else {
+                fprintf(stderr, "syntax error: expected filename after %s\n", STDOUT_APPEND);
+                exit(1);
+            }
+        } else {
+
+            new_argv[new_argc++] = cmd->argv[i];
+        }
+    }
+    new_argv[new_argc] = NULL;
+    
+    // update the new argument now that we got rid of and parsed the redirection
+    cmd->argc = new_argc;
+    for (int i = 0; i < new_argc; i++) {
+        cmd->argv[i] = new_argv[i];
+    }
+    cmd->argv[new_argc] = NULL;
 }
