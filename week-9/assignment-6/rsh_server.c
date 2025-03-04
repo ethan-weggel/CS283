@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <sys/un.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
+#include <errno.h>
 
 //INCLUDES for extra credit
 //#include <signal.h>
@@ -46,7 +48,7 @@
  *      IF YOU IMPLEMENT THE MULTI-THREADED SERVER FOR EXTRA CREDIT YOU NEED
  *      TO DO SOMETHING WITH THE is_threaded ARGUMENT HOWEVER.  
  */
-int start_server(char *ifaces, int port, int is_threaded){
+int start_server(char *ifaces, int port, int is_threaded) {
     int svr_socket;
     int rc;
 
@@ -77,7 +79,7 @@ int start_server(char *ifaces, int port, int is_threaded){
  *      This function simply returns the value of close() when closing
  *      the socket.  
  */
-int stop_server(int svr_socket){
+int stop_server(int svr_socket) {
     return close(svr_socket);
 }
 
@@ -114,8 +116,41 @@ int stop_server(int svr_socket){
  *                               bind(), or listen() call fails. 
  * 
  */
-int boot_server(char *ifaces, int port){
-    return WARN_RDSH_NOT_IMPL;
+int boot_server(char *ifaces, int port) {
+    
+    // set up new socket and check for error
+    int socketFd = socket(AF_INET, SOCK_STREAM, 0);
+    if (socketFd < 0) {
+        return ERR_RDSH_COMMUNICATION;
+    }
+
+    // force-binding port via linux syscall
+    int enable = 1;
+    setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+
+    // bind socket to server address w/ port number by populating addr. struct
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    // converting string ip to usable form
+    if (inet_pton(AF_INET, ifaces, &address.sin_addr) <= 0) {
+        return ERR_RDSH_COMMUNICATION;
+    }
+
+    int bindRC = bind(socketFd, (const struct sockaddr*) &address, sizeof(struct sockaddr_in));
+    if (bindRC < 0) {
+        return ERR_RDSH_COMMUNICATION;
+    }
+
+    // now we set up listen syscall so that socket will listen for connection
+    // backlog size -> queue of 20 clients
+    int listenRC = listen(socketFd, 20);
+    if (listenRC < 0) {
+        return ERR_RDSH_COMMUNICATION;
+    }
+
+    return socketFd;
 }
 
 /*
@@ -159,8 +194,32 @@ int boot_server(char *ifaces, int port){
  *                connections, and negative values terminate the server. 
  * 
  */
-int process_cli_requests(int svr_socket){
-    return WARN_RDSH_NOT_IMPL;
+int process_cli_requests(int svr_socket) {
+    int connectedSocketFd;
+    int rc;
+
+    while (1) {
+        // try to connect and handle errors
+        connectedSocketFd = accept(svr_socket, NULL, NULL);
+        if (connectedSocketFd) {
+            printf("Server connected to new client.\n");
+        }
+
+        if (connectedSocketFd < 0) {
+            return ERR_RDSH_COMMUNICATION;
+        }
+
+        // handle request, check for exit
+        rc = exec_client_requests(connectedSocketFd);
+        if (rc < 0) {
+            break;
+        }
+    }
+
+    // free memory here?? (see function header comment for confusion of buffer freeing)
+
+    stop_server(svr_socket);
+    return OK;
 }
 
 /*
@@ -205,7 +264,88 @@ int process_cli_requests(int svr_socket){
  *                or receive errors. 
  */
 int exec_client_requests(int cli_socket) {
-    return WARN_RDSH_NOT_IMPL;
+    char* buff;
+    int recv_size;
+    int is_last_chunk;
+    char eof_char = '\0';
+    int rc;
+
+    buff = malloc(RDSH_COMM_BUFF_SZ);
+
+    // while we haven't chosen to exit, keep looping
+    while (1) {
+
+        // while we haven't reached the end of our stream, keep looping and collecting chunks
+        while ((recv_size = recv(cli_socket, buff, RDSH_COMM_BUFF_SZ, 0)) > 0) {
+
+            // if we get an error, return error code for communication fault
+            if (recv_size < 0) {
+                return ERR_RDSH_COMMUNICATION;
+            }
+
+            // if we received zero bytes [even though this can happen while waiting], exit
+            // LOOK HERE FIRST FOR DBUGGING/PROBLEMS
+            if (recv_size == 0) {
+                return OK;
+            }
+
+            is_last_chunk = ((char) buff[recv_size-1] == eof_char) ? 1 : 0;
+
+            if (is_last_chunk) {
+                buff[recv_size-1] = '\0';
+                break;
+            }
+        }
+
+        // now we have a null-terminated string inside buff;
+        printf("SERVER RECEVIED -> %s\n", buff);
+
+        if (strcmp(buff, "exit") == 0) {
+
+            rc = send_message_string(cli_socket, buff);
+            if (rc < 0) {
+                return ERR_RDSH_COMMUNICATION;
+            }
+    
+            rc = send_message_eof(cli_socket);
+            if (rc < 0) {
+                return ERR_RDSH_COMMUNICATION;
+            }
+
+            free(buff);
+            return OK;  // or whatever code signals "done with this client"
+        }
+
+        if (strcmp(buff, "stop-server") == 0) {
+
+            rc = send_message_string(cli_socket, "exit");
+            if (rc < 0) {
+                return ERR_RDSH_COMMUNICATION;
+            }
+    
+            rc = send_message_eof(cli_socket);
+            if (rc < 0) {
+                return ERR_RDSH_COMMUNICATION;
+            }
+
+            free(buff);
+            return OK_EXIT;
+        }
+        
+        rc = send_message_string(cli_socket, buff);
+        if (rc < 0) {
+            return ERR_RDSH_COMMUNICATION;
+        }
+
+        rc = send_message_eof(cli_socket);
+        if (rc < 0) {
+            return ERR_RDSH_COMMUNICATION;
+        }
+
+        continue;
+    }
+
+    return OK;
 }
 
 /*
@@ -222,8 +362,18 @@ int exec_client_requests(int cli_socket) {
  *      ERR_RDSH_COMMUNICATION:  The send() socket call returned an error or if
  *           we were unable to send the EOF character. 
  */
-int send_message_eof(int cli_socket){
-    return WARN_RDSH_NOT_IMPL;
+int send_message_eof(int cli_socket) {
+    ssize_t bytesSent;
+
+    // send EOF character [one byte], return OK if we are successful
+    bytesSent = send(cli_socket, &RDSH_EOF_CHAR, 1, MSG_NOSIGNAL);
+    if (bytesSent == 1) {
+
+        return OK;
+    }
+
+    // if we got here, something bad happened 
+    return ERR_RDSH_COMMUNICATION;
 }
 
 /*
@@ -244,8 +394,17 @@ int send_message_eof(int cli_socket){
  *      ERR_RDSH_COMMUNICATION:  The send() socket call returned an error or if
  *           we were unable to send the message followed by the EOF character. 
  */
-int send_message_string(int cli_socket, char *buff){
-    return WARN_RDSH_NOT_IMPL;
+int send_message_string(int cli_socket, char *buff) {
+    size_t bytesSent;
+
+    // send null-terminated string, if we get that number of bytes sent, we are successful
+    bytesSent = send(cli_socket, buff, strlen(buff), 0);
+    if (bytesSent == strlen(buff)) {
+        return OK;
+    }
+
+    // if we got here, something bad happened
+    return ERR_RDSH_COMMUNICATION;
 }
 
 
@@ -324,8 +483,7 @@ int rsh_execute_pipeline(int cli_sock, command_list_t *clist) {
  *      BI_NOT_BI:  If the command is not "built-in" the BI_NOT_BI value is
  *                  returned. 
  */
-Built_In_Cmds rsh_match_command(const char *input)
-{
+Built_In_Cmds rsh_match_command(const char *input) {
     return BI_NOT_IMPLEMENTED;
 }
 
@@ -361,7 +519,6 @@ Built_In_Cmds rsh_match_command(const char *input)
  *   AGAIN - THIS IS TOTALLY OPTIONAL IF YOU HAVE OR WANT TO HANDLE BUILT-IN
  *   COMMANDS DIFFERENTLY. 
  */
-Built_In_Cmds rsh_built_in_cmd(cmd_buff_t *cmd)
-{
+Built_In_Cmds rsh_built_in_cmd(cmd_buff_t *cmd) {
     return BI_NOT_IMPLEMENTED;
 }

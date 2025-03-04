@@ -37,6 +37,10 @@ typedef struct command_list{
 #define SPACE_CHAR  ' '
 #define PIPE_CHAR   '|'
 #define PIPE_STRING "|"
+#define QUOTE_STRING "\""
+#define REDIR_STDOUT ">"
+#define REDIR_STDIN "<"
+#define STDOUT_APPEND ">>"
 
 #define SH_PROMPT       "dsh4> "
 #define EXIT_CMD        "exit"
@@ -63,6 +67,12 @@ int build_cmd_buff(char *cmd_line, cmd_buff_t *cmd_buff);
 int close_cmd_buff(cmd_buff_t *cmd_buff);
 int build_cmd_list(char *cmd_line, command_list_t *clist);
 int free_cmd_list(command_list_t *cmd_lst);
+
+//custom functions
+void stripLTWhiteSpace(char* string);
+int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter);
+extern void print_dragon();
+void handle_redirections(cmd_buff_t *cmd);
 
 //built in command stuff
 typedef enum {

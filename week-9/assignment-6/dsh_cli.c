@@ -3,6 +3,7 @@
 #include <string.h>
 #include <argp.h>
 #include <getopt.h>
+#include <signal.h>
 
 #include "dshlib.h"
 #include "rshlib.h"
@@ -116,6 +117,7 @@ void parse_args(int argc, char *argv[], cmd_args_t *cargs) {
  *    3. start the client with the -c option
 */
 int main(int argc, char *argv[]){
+  signal(SIGPIPE, SIG_IGN);
   cmd_args_t cargs;
   int rc;
 

@@ -90,9 +90,78 @@
  *   function after cleaning things up.  See the documentation for client_cleanup()
  *      
  */
-int exec_remote_cmd_loop(char *address, int port)
-{
-    return WARN_RDSH_NOT_IMPL;
+int exec_remote_cmd_loop(char *address, int port) {
+    char* sendBuff;
+    char* receiveBuff;
+
+    size_t bytesSent;
+
+    int recv_size;
+    int is_last_chunk;
+    char eof_char = RDSH_EOF_CHAR;
+
+    // allocate buffers, check error
+    sendBuff = malloc(RDSH_COMM_BUFF_SZ);
+    receiveBuff = malloc(RDSH_COMM_BUFF_SZ);
+    if (!sendBuff || !receiveBuff) {
+        return ERR_MEMORY;
+    }
+
+    // make new socket connection, check error
+    int socket = start_client(address, port);
+    if (socket < 0) {
+        return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_CLIENT);
+    }
+
+    // now we start fgets() loop to parse and send/receive commands
+    while (1) {
+        printf("%s", SH_PROMPT);
+        if (fgets(sendBuff, ARG_MAX, stdin) == NULL) {
+            printf("\n");
+            break;
+        }
+
+        sendBuff[strcspn(sendBuff, "\n")] = '\0';
+
+        if (strlen(sendBuff) == 0) {
+            printf(CMD_WARN_NO_CMD);
+            continue;
+        }
+
+        // send buffer contents
+        // send null-terminated string, if we get that number of bytes sent, we are successful
+        bytesSent = send(socket, sendBuff, strlen(sendBuff)+1, 0);
+        if (bytesSent != strlen(sendBuff)+1) {
+            return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_COMMUNICATION);
+        }
+
+        // receive server response and put into buffer to print out
+        // follow same logic as server using different buffer and different stream-termination character
+        while ((recv_size = recv(socket, receiveBuff, RDSH_COMM_BUFF_SZ, 0)) > 0){
+            if (recv_size < 0) {
+                return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_COMMUNICATION);
+            }
+
+            if (recv_size == 0) {    
+                return client_cleanup(socket, sendBuff, receiveBuff, OK);
+            }
+        
+            is_last_chunk = ((char) receiveBuff[recv_size-1] == eof_char) ? 1 : 0;
+        
+            if (is_last_chunk) {
+                receiveBuff[recv_size-1] = '\0';
+            }
+        
+            if (is_last_chunk) {
+                break;
+            }
+        }
+
+        printf("CLIENT RECEIVED -> %.*s\n", (int) recv_size, receiveBuff);
+        if (strcmp(receiveBuff, "exit") == 0) {
+            return client_cleanup(socket, sendBuff, receiveBuff, OK);
+        }
+    }
 }
 
 /*
@@ -118,8 +187,35 @@ int exec_remote_cmd_loop(char *address, int port)
  *          ERR_RDSH_CLIENT:    If socket() or connect() fail
  * 
  */
-int start_client(char *server_ip, int port){
-    return WARN_RDSH_NOT_IMPL;
+int start_client(char *server_ip, int port) {
+    int socketFd;
+
+    // make new socket, check for error
+    socketFd = socket(AF_INET, SOCK_STREAM, 0);
+    if (socketFd < 0) {
+        return ERR_RDSH_CLIENT;
+    }
+
+    // make new address struct and populate it
+    struct sockaddr_in address;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+
+    // convert ip to usable binary form, populate field; check error
+    if (inet_pton(AF_INET, server_ip, &address.sin_addr) <= 0) {
+        close(socketFd);
+        return ERR_RDSH_CLIENT;
+    }
+
+    // connect to server; check error
+    if (connect(socketFd, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        close(socketFd);
+        return ERR_RDSH_CLIENT;
+    }
+
+    // otherwise, we are good and connected, return valid socket handle
+    return socketFd;
 }
 
 /*
@@ -146,9 +242,9 @@ int start_client(char *server_ip, int port){
  *                can just write return client_cleanup(...)
  *      
  */
-int client_cleanup(int cli_socket, char *cmd_buff, char *rsp_buff, int rc){
+int client_cleanup(int cli_socket, char *cmd_buff, char *rsp_buff, int rc) {
     //If a valid socket number close it.
-    if(cli_socket > 0){
+    if (cli_socket > 0) {
         close(cli_socket);
     }
 
