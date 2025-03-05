@@ -257,8 +257,10 @@ void* handle_threaded_client(void* arg) {
     rc = exec_client_requests(socket);
 
     if (rc == OK_EXIT) {
-        SERVER_STOP = 1;
         close(LISTEN_SOCKET);
+        SERVER_STOP = 1;
+        // send_message_string(socket, "exit");
+        close(socket);
         return NULL;
     }
 
@@ -318,6 +320,12 @@ int exec_client_requests(int cli_socket) {
 
     // while we haven't chosen to exit, keep looping
     while (1) {
+
+        if (SERVER_STOP) {
+            // send_message_string(cli_socket, "exit");
+            return OK_EXIT;
+        }
+
         command_list_t* clist = (command_list_t*) malloc(sizeof(command_list_t));
         if (!clist) {
             perror("malloc failed");
@@ -347,6 +355,12 @@ int exec_client_requests(int cli_socket) {
             }
         }
 
+        if (strlen(buff) == 0) {
+            // Drain any remaining null bytes, or simply break out.
+            // For example, break out of the loop to close the connection:
+            break;
+        }
+
         // now we have a null-terminated string inside buff;
         printf(RCMD_MSG_SVR_EXEC_REQ, buff);
 
@@ -356,26 +370,16 @@ int exec_client_requests(int cli_socket) {
             if (rc < 0) {
                 return ERR_RDSH_COMMUNICATION;
             }
-    
-            rc = send_message_eof(cli_socket);
-            if (rc < 0) {
-                return ERR_RDSH_COMMUNICATION;
-            }
 
             printf(RCMD_MSG_CLIENT_EXITED);
 
             free(buff);
-            return OK;  // or whatever code signals "done with this client"
+            return OK;  
         }
 
         if (strcmp(buff, "stop-server") == 0) {
 
             rc = send_message_string(cli_socket, "exit");
-            if (rc < 0) {
-                return ERR_RDSH_COMMUNICATION;
-            }
-    
-            rc = send_message_eof(cli_socket);
             if (rc < 0) {
                 return ERR_RDSH_COMMUNICATION;
             }
@@ -416,7 +420,8 @@ int exec_client_requests(int cli_socket) {
         close(saved_stdout);
         close(saved_stderr);
 
-        printf(RCMD_MSG_SVR_RC_CMD, rc);
+        // printf(RCMD_MSG_SVR_RC_CMD, rc);
+        free(clist);
 
         continue;
     }
@@ -476,15 +481,14 @@ int send_message_string(int cli_socket, char *buff) {
     // send null-terminated string, if we get that number of bytes sent, we are successful
     bytesSent = send(cli_socket, buff, strlen(buff), 0);
     if (bytesSent == strlen(buff)) {
+        int rc = send_message_eof(cli_socket);
+        if (rc < 0) {
+            return ERR_RDSH_COMMUNICATION;
+        }
         return OK;
     }
 
-    int rc = send_message_eof(cli_socket);
-    if (rc < 0) {
-        return ERR_RDSH_COMMUNICATION;
-    }
-
-    return OK;
+    return ERR_RDSH_COMMUNICATION;
 }
 
 
@@ -527,6 +531,7 @@ int send_message_string(int cli_socket, char *buff) {
  *                  get this value. 
  */
 int rsh_execute_pipeline(int cli_sock, command_list_t *clist) {
+
     // changing the file descriptors for parent process so ALL
     // children inherit this behavior; we set it back to default
     // when function exits
@@ -541,6 +546,8 @@ int rsh_execute_pipeline(int cli_sock, command_list_t *clist) {
         if (type != BI_NOT_BI) {
             Built_In_Cmds rc = rsh_built_in_cmd(cmd, cli_sock);
             send_message_eof(cli_sock);
+
+
             if (rc == BI_CMD_EXIT) {
                 return OK_EXIT;
             }
@@ -565,6 +572,9 @@ int rsh_execute_pipeline(int cli_sock, command_list_t *clist) {
             exit(EXIT_FAILURE);
         }
         if (pids[i] == 0) {
+            // if (i == 0) {
+            //     dup2(cli_sock, STDIN_FILENO);
+            // }
 
             if (i > 0) {
                 dup2(pipes[i-1][0], STDIN_FILENO);
@@ -572,6 +582,11 @@ int rsh_execute_pipeline(int cli_sock, command_list_t *clist) {
             if (i < clist->num - 1) {
                 dup2(pipes[i][1], STDOUT_FILENO);
             }
+
+            // if (i == clist->num - 1) {
+            //     dup2(cli_sock, STDOUT_FILENO);
+            //     dup2(cli_sock, STDERR_FILENO);
+            // }
 
             for (int j = 0; j < clist->num - 1; j++) {
                 close(pipes[j][0]);
@@ -607,32 +622,30 @@ int rsh_execute_pipeline(int cli_sock, command_list_t *clist) {
         if (WIFEXITED(childStatus) && WEXITSTATUS(childStatus)) {
             switch (WEXITSTATUS(childStatus)) {
                 case ENOENT:
-                    printf("Command not found in PATH\n");
+                    send_message_string(cli_sock, "Command not found in PATH\n");
                     errno = WEXITSTATUS(childStatus);
-                    send_message_eof(cli_sock);
+                    // send_message_eof(cli_sock);
                     return errno;
                 case EACCES:
-                    printf("Permission denied to execute command\n");
+                    send_message_string(cli_sock, "Permission denied to execute command\n");
                     errno = WEXITSTATUS(childStatus);
-                    send_message_eof(cli_sock);
+                    // send_message_eof(cli_sock);
                     return errno;
                 default:
-                    printf("Error executing external command\n");
+                    send_message_string(cli_sock, "Error executing external command\n");
                     errno = WEXITSTATUS(childStatus);
-                    send_message_eof(cli_sock);
+                    // send_message_eof(cli_sock);
                     return errno;
             }
         }
     }
 
     send_message_eof(cli_sock);
+
     return pipelineStatus;
 }
 
 Built_In_Cmds rsh_built_in_cmd(cmd_buff_t *cmd, int cli_socket) {
-    // dup2(cli_socket, STDIN_FILENO);
-    // dup2(cli_socket, STDOUT_FILENO);
-    // dup2(cli_socket, STDERR_FILENO);
 
     Built_In_Cmds type = match_command(cmd->argv[0]);
 

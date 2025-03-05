@@ -7,11 +7,33 @@
 #include <unistd.h>
 #include <sys/un.h>
 #include <fcntl.h>
+#include <poll.h>
 
 #include "dshlib.h"
 #include "rshlib.h"
 
+int check_server_status(int socket_fd) {
+    struct pollfd pfd;
+    pfd.fd = socket_fd;
+    pfd.events = POLLIN;  // We are interested in read events.
 
+    // Poll with a timeout of 0 means a non-blocking check.
+    int poll_ret = poll(&pfd, 1, 0);
+    if (poll_ret < 0) {
+        perror("poll failed");
+        return -1;  // error occurred
+    }
+    if (poll_ret > 0) {
+        // Check if the socket was hung up or has an error.
+        if (pfd.revents & (POLLHUP | POLLERR)) {
+            // POLLHUP indicates that the server has closed the connection.
+            // POLLERR indicates there was an error.
+            return 1; // Signal that the connection is no longer valid.
+        }
+    }
+    // poll_ret == 0 means no events, so assume the connection is still alive.
+    return 0;
+}
 
 
 /*
@@ -115,6 +137,12 @@ int exec_remote_cmd_loop(char *address, int port) {
 
     // now we start fgets() loop to parse and send/receive commands
     while (1) {
+
+        if (check_server_status(socket) != 0) {
+            printf(RCMD_SERVER_EXITED);
+            return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_COMMUNICATION);
+        }
+
         printf("%s", SH_PROMPT);
         if (fgets(sendBuff, ARG_MAX, stdin) == NULL) {
             printf("\n");
@@ -132,6 +160,8 @@ int exec_remote_cmd_loop(char *address, int port) {
         // send null-terminated string, if we get that number of bytes sent, we are successful
         bytesSent = send(socket, sendBuff, strlen(sendBuff)+1, 0);
         if (bytesSent != strlen(sendBuff)+1) {
+            // printf(RCMD_SERVER_EXITED);
+            // server_stopped = 1;
             return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_COMMUNICATION);
         }
 
@@ -139,6 +169,8 @@ int exec_remote_cmd_loop(char *address, int port) {
         // follow same logic as server using different buffer and different stream-termination character
         while ((recv_size = recv(socket, receiveBuff, RDSH_COMM_BUFF_SZ, 0)) > 0) {
             if (recv_size < 0) {
+                // printf(RCMD_SERVER_EXITED);
+                // server_stopped = 1;
                 return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_COMMUNICATION);
             }
 
@@ -159,18 +191,19 @@ int exec_remote_cmd_loop(char *address, int port) {
                 break;
             }
         }
-
-        if (recv_size == 0) {
-            // The server has closed the connection.
-            printf(RCMD_SERVER_EXITED);
-            return client_cleanup(socket, sendBuff, receiveBuff, OK);
-        }
         
         receiveBuff[recv_size] = '\0'; 
 
         if (strcmp(receiveBuff, "exit") == 0) {
             return client_cleanup(socket, sendBuff, receiveBuff, OK);
         }
+
+        // THIS BLOCK
+        // if (recv_size == 0) {
+        //     // The server has closed the connection.
+        //     printf(RCMD_SERVER_EXITED);
+        //     return client_cleanup(socket, sendBuff, receiveBuff, OK);
+        // }
 
         printf("\n");
     }

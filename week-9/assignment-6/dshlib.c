@@ -115,6 +115,11 @@ int exec_local_cmd_loop() {
  * returns: ok on success, error code on failure
  */
 int build_cmd_list(char *cmd_line, command_list_t *clist) {
+
+    // if (strlen(cmd_line) == 0) {
+    //     return ERR_CMD_ARGS_BAD;
+    // }
+
     int commandCount = 0;
     char tokenBuffer[SH_CMD_MAX]; // local token buffer
     cmd_buff_t command_t;
@@ -189,7 +194,6 @@ int build_cmd_list(char *cmd_line, command_list_t *clist) {
         }
 
     }
-
 
     return OK;
 }
@@ -386,6 +390,7 @@ int build_cmd_buff(char* cmd_line, cmd_buff_t* cmd_buff) {
 
     // set number of args and free memory
     cmd_buff->argc = argc;
+    cmd_buff->argv[cmd_buff->argc] = NULL;
     return OK;
 }
 
