@@ -137,31 +137,45 @@ int exec_remote_cmd_loop(char *address, int port) {
 
         // receive server response and put into buffer to print out
         // follow same logic as server using different buffer and different stream-termination character
-        while ((recv_size = recv(socket, receiveBuff, RDSH_COMM_BUFF_SZ, 0)) > 0){
+        while ((recv_size = recv(socket, receiveBuff, RDSH_COMM_BUFF_SZ, 0)) > 0) {
             if (recv_size < 0) {
                 return client_cleanup(socket, sendBuff, receiveBuff, ERR_RDSH_COMMUNICATION);
             }
 
-            if (recv_size == 0) {    
-                return client_cleanup(socket, sendBuff, receiveBuff, OK);
-            }
-        
-            is_last_chunk = ((char) receiveBuff[recv_size-1] == eof_char) ? 1 : 0;
-        
+            // check for EOF in this chunk
+            is_last_chunk = (receiveBuff[recv_size - 1] == eof_char);
             if (is_last_chunk) {
-                receiveBuff[recv_size-1] = '\0';
+                recv_size--; // exclude the EOF marker
             }
-        
+
+            // test for exit within the chunk without adding null-terminator to mess up printing if we are not quitting
+            if (receiveBuff[0] == 'e' && receiveBuff[1] == 'x' && receiveBuff[2] == 'i' && receiveBuff[3] == 't') {
+                break;
+            }
+
+            // print the chunk immediately
+            printf("%.*s", (int) recv_size, receiveBuff);
             if (is_last_chunk) {
                 break;
             }
         }
 
-        printf("CLIENT RECEIVED -> %.*s\n", (int) recv_size, receiveBuff);
+        if (recv_size == 0) {
+            // The server has closed the connection.
+            printf(RCMD_SERVER_EXITED);
+            return client_cleanup(socket, sendBuff, receiveBuff, OK);
+        }
+        
+        receiveBuff[recv_size] = '\0'; 
+
         if (strcmp(receiveBuff, "exit") == 0) {
             return client_cleanup(socket, sendBuff, receiveBuff, OK);
         }
+
+        printf("\n");
     }
+
+    return OK;
 }
 
 /*

@@ -16,12 +16,12 @@
 #define MODE_SCLI   1       //Socket client
 #define MODE_SSVR   2       //Socket server
 
-typedef struct cmd_args{
+typedef struct cmd_args {
   int   mode;
   char  ip[16];   //e.g., 192.168.100.101\0
   int   port;
   int   threaded_server;
-}cmd_args_t;
+} cmd_args_t;
 
 
 

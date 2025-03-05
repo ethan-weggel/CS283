@@ -10,16 +10,14 @@
 // Longest command that can be read from the shell
 #define SH_CMD_MAX EXE_MAX + ARG_MAX
 
-typedef struct command
-{
+typedef struct command {
     char exe[EXE_MAX];
     char args[ARG_MAX];
 } command_t;
 
 #include <stdbool.h>
 
-typedef struct cmd_buff
-{
+typedef struct cmd_buff {
     int  argc;
     char *argv[CMD_ARGV_MAX];
     char *_cmd_buffer;
@@ -28,10 +26,16 @@ typedef struct cmd_buff
     bool append_mode; // extra credit, sets append mode fomr output_file
 } cmd_buff_t;
 
-typedef struct command_list{
+typedef struct command_list {
     int num;
     cmd_buff_t commands[CMD_MAX];
-}command_list_t;
+} command_list_t;
+
+// typedef struct thread_args_t {
+//     char* ifaces;
+//     int port;
+//     int rc;
+// } thread_args_t;
 
 //Special character #defines
 #define SPACE_CHAR  ' '
@@ -73,6 +77,9 @@ void stripLTWhiteSpace(char* string);
 int getTruncToken(char* inputString, char* tokenBuffer, char* delimiter);
 extern void print_dragon();
 void handle_redirections(cmd_buff_t *cmd);
+
+// for multi-threading
+void* handle_threaded_client(void* arg);
 
 //built in command stuff
 typedef enum {
